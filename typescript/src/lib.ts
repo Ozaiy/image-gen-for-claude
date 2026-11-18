@@ -11,7 +11,7 @@ import jpeg from "jpeg-js";
 import OpenAI from "openai";
 import { PNG } from "pngjs";
 
-export const VERSION = "0.4.1";
+export const VERSION = "0.5.0";
 export const TRANSPARENT_MODEL = "gpt-image-1.5"; // gpt-image-2 can't do transparent backgrounds
 const IMAGE_SUFFIXES = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const isWindows = process.platform === "win32";
@@ -54,12 +54,17 @@ export function configDir(): string {
   return xdg && path.isAbsolute(xdg) ? xdg : path.join(homedir(), ".config");
 }
 
+/** The two image services: OpenAI, and Black Forest Labs (FLUX). */
+export type Provider = "openai" | "bfl";
+const KEY_ENV: Record<Provider, string> = { openai: "OPENAI_API_KEY", bfl: "BFL_API_KEY" };
+const PROVIDER_NAME: Record<Provider, string> = { openai: "OpenAI", bfl: "Black Forest Labs (FLUX)" };
+
 /** Files the API key is read from, in order. The first is in the OS's usual config folder. */
-export function keyFiles(): string[] {
+export function keyFiles(provider: Provider = "openai"): string[] {
   const paths = [
-    path.join(configDir(), "openai", "api_key"),
+    path.join(configDir(), provider, "api_key"),
     // Also checked everywhere, because many macOS and Windows users keep CLI config here
-    path.join(homedir(), ".config", "openai", "api_key"),
+    path.join(homedir(), ".config", provider, "api_key"),
   ];
   return [...new Set(paths)];
 }
@@ -131,10 +136,10 @@ export function readKeyFile(file: string): string {
   return text.trim();
 }
 
-export function findApiKey(): string | undefined {
-  const fromEnv = setting("OPENAI_API_KEY");
+export function findApiKey(provider: Provider = "openai"): string | undefined {
+  const fromEnv = setting(KEY_ENV[provider]);
   if (fromEnv) return fromEnv;
-  for (const file of keyFiles()) {
+  for (const file of keyFiles(provider)) {
     try {
       if (statSync(file).isFile()) {
         const key = readKeyFile(file);
@@ -147,16 +152,19 @@ export function findApiKey(): string | undefined {
   return undefined;
 }
 
+/** The API key, or an error saying exactly where to put it. */
+export function requireApiKey(provider: Provider = "openai"): string {
+  const key = findApiKey(provider);
+  if (key) return key;
+  const places = keyFiles(provider).map((p) => `  ${p}`).join("\n");
+  throw new Error(
+    `No ${PROVIDER_NAME[provider]} API key. Set ${KEY_ENV[provider]}, or save the key in a file named ` +
+      `api_key in one of these places:\n${places}`
+  );
+}
+
 export function makeClient(): OpenAI {
-  const key = findApiKey();
-  if (!key) {
-    const places = keyFiles().map((p) => `  ${p}`).join("\n");
-    throw new Error(
-      "No OpenAI API key. Set OPENAI_API_KEY, or save the key in a file named " +
-        `api_key in one of these places:\n${places}`
-    );
-  }
-  return new OpenAI({ apiKey: key });
+  return new OpenAI({ apiKey: requireApiKey("openai") });
 }
 
 // ---------- output paths ----------
@@ -256,13 +264,140 @@ export function makePreview(image: Buffer, format: Format): Preview | undefined 
   return { data: Buffer.from(jpeg.encode(small, PREVIEW_QUALITY).data).toString("base64"), mimeType: "image/jpeg" };
 }
 
+// ---------- image formats ----------
+
+/** The real format of image bytes, from their first bytes. */
+export function sniffFormat(image: Buffer): Format | undefined {
+  if (image.length >= 8 && image.readUInt32BE(0) === 0x89504e47) return "png";
+  if (image.length >= 3 && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff) return "jpeg";
+  if (image.length >= 12 && image.toString("latin1", 0, 4) === "RIFF" && image.toString("latin1", 8, 12) === "WEBP") return "webp";
+  return undefined;
+}
+
+/**
+ * Convert between PNG and JPEG (quality 95). WebP can't be read or written here,
+ * so those return undefined and the caller keeps the original.
+ */
+export function convertImage(image: Buffer, from: Format, to: Format): Buffer | undefined {
+  if (from === to) return image;
+  if (from === "webp" || to === "webp") return undefined;
+  const decoded =
+    from === "png" ? PNG.sync.read(image) : jpeg.decode(image, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 1024 });
+  if (to === "jpeg") {
+    // JPEG has no transparency: put transparent pixels on white
+    const flat = downscale(decoded.data, decoded.width, decoded.height, Math.max(decoded.width, decoded.height));
+    return Buffer.from(jpeg.encode(flat, 95).data);
+  }
+  const png = new PNG({ width: decoded.width, height: decoded.height });
+  Buffer.from(decoded.data).copy(png.data);
+  return PNG.sync.write(png);
+}
+
+// ---------- FLUX (Black Forest Labs) ----------
+
+export const BFL_API = "https://api.bfl.ai/v1";
+export const DEFAULT_FLUX_MODEL = "flux-3-image";
+const FLUX_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** FLUX 3 Image and the FLUX.2 family take width/height prompts; the older FLUX.1 models take other fields. */
+export function isFluxModel(model: string): boolean {
+  return model.startsWith("flux-");
+}
+function fluxSupported(model: string): boolean {
+  return model.startsWith("flux-3-image") || model.startsWith("flux-2-");
+}
+
+/** The request body for a FLUX model. Endpoints reject unknown fields, so only send what each takes. */
+export function fluxBody(model: string, prompt: string, size: Size, format: Format): Record<string, unknown> {
+  const [width, height] = size.split("x").map(Number);
+  const body: Record<string, unknown> = { prompt, width, height };
+  if (model.startsWith("flux-2-")) body.output_format = format; // jpeg, png or webp
+  else if (model.startsWith("flux-3-image-klein") && format !== "webp") body.output_format = format;
+  // flux-3-image has no output_format; what it returns is converted afterwards
+  return body;
+}
+
+/** fetch, or a fake in tests. */
+export type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{
+  ok: boolean;
+  status: number;
+  json(): Promise<any>;
+  text(): Promise<string>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}>;
+
+export interface FluxResult {
+  image: Buffer;
+  cost?: number;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Submit, poll until ready, and download right away (the result URL expires). */
+export async function generateFlux(
+  model: string,
+  body: Record<string, unknown>,
+  key: string,
+  fetchFn: Fetch = fetch as unknown as Fetch,
+  pollMs = 750
+): Promise<FluxResult> {
+  const headers = { "x-key": key, accept: "application/json" };
+  const submit = await fetchFn(`${BFL_API}/${model}`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!submit.ok) {
+    const detail = await submit.text().catch(() => "");
+    if (submit.status === 402) throw new Error("FLUX: not enough credits. Add credits at https://dashboard.bfl.ai");
+    if (submit.status === 429) throw new Error("FLUX: too many requests at once. Try again in a moment.");
+    if (submit.status === 401 || submit.status === 403) throw new Error(`FLUX: the API key was refused (HTTP ${submit.status}).`);
+    if (submit.status === 404) throw new Error(`FLUX: unknown model "${model}" (HTTP 404).`);
+    throw new Error(`FLUX: HTTP ${submit.status} ${detail.slice(0, 500)}`);
+  }
+  const task = await submit.json();
+  if (!task?.polling_url) throw new Error("FLUX: no polling_url in the response");
+
+  const deadline = Date.now() + FLUX_POLL_TIMEOUT_MS;
+  for (;;) {
+    await sleep(pollMs);
+    const poll = await fetchFn(task.polling_url, { headers });
+    // a failed task can come back as HTTP 503 with a JSON body, so read the body either way
+    const state = await poll.json().catch(() => ({ status: `HTTP ${poll.status}` }));
+    const status: string = state?.status ?? "";
+    if (status === "Ready") {
+      const url = state?.result?.sample;
+      if (!url) throw new Error("FLUX: the result has no image URL");
+      const download = await fetchFn(url);
+      if (!download.ok) throw new Error(`FLUX: downloading the image failed (HTTP ${download.status})`);
+      return { image: Buffer.from(await download.arrayBuffer()), cost: task.cost ?? undefined };
+    }
+    if (status === "Pending" || status === "Reasoning" || status === "Generating") {
+      if (Date.now() > deadline) throw new Error("FLUX: still not ready after 5 minutes");
+      continue;
+    }
+    if (status === "Request Moderated" || status === "Content Moderated") {
+      throw new Error(`FLUX: ${status}. The prompt or result was blocked by moderation.`);
+    }
+    const why = state?.details ? ` ${JSON.stringify(state.details).slice(0, 500)}` : "";
+    throw new Error(`FLUX: ${status || "unknown status"}.${why}`);
+  }
+}
+
 // ---------- the tool ----------
 
-export const TOOL_DESCRIPTION = `Generate an image with OpenAI and save it to disk. Returns the saved file
-path and a small JPEG preview of the image (the saved file is full resolution).
+export const TOOL_DESCRIPTION = `Generate an image with OpenAI (gpt-image) or Black Forest Labs (FLUX) and save
+it to disk. Returns the saved file path and a small JPEG preview of the image
+(the saved file is full resolution).
 In your reply, always give the user the full path of the saved file.
 
-QUALITY - choose carefully, higher quality costs much more:
+model: leave empty for the default (OpenAI gpt-image-2 if an OpenAI key is set
+       up, otherwise FLUX flux-3-image). Use a FLUX model when the user asks for
+       FLUX: "flux-3-image" (best), "flux-3-image-klein" (fast, cheap), or a
+       FLUX.2 model such as "flux-2-pro". FLUX can't do transparent backgrounds
+       and ignores quality.
+
+QUALITY (OpenAI only) - choose carefully, higher quality costs much more:
   - "low"    (default) drafts, previews, trying out ideas, placeholders.
   - "medium" decent images for normal use when low looks too rough.
   - "high"   ONLY for final assets the user explicitly wants in high quality,
@@ -270,13 +405,12 @@ QUALITY - choose carefully, higher quality costs much more:
              "high" for experiments or multiple variations.
 
 size: 1024x1024 square, 1536x1024 landscape (hero banners), 1024x1536 portrait.
-background: "transparent" for logos/icons/stickers (needs png or webp).
+background: "transparent" for logos/icons/stickers (needs png or webp; OpenAI only).
 output_path: where to save, ideally an absolute path inside the user's project,
              e.g. "/Users/me/site/images/hero.png" or "C:\\Users\\me\\site\\hero.png".
              ~ and environment variables are expanded. A folder gets an
              auto-named file; a relative path is saved inside the default folder.
-             If omitted, saves to the user's Pictures folder.
-model: override the default model (normally leave empty).`;
+             If omitted, saves to the user's Pictures folder.`;
 
 export interface GenerateArgs {
   prompt: string;
@@ -300,44 +434,92 @@ export interface ImageClient {
 
 let client: ImageClient | undefined;
 
+/** The model to use when none is named: OPENAI_IMAGE_MODEL, else OpenAI if it has a key, else FLUX if it has one. */
+export function defaultModel(): string {
+  const configured = setting("OPENAI_IMAGE_MODEL");
+  if (configured) return configured;
+  if (!findApiKey("openai") && findApiKey("bfl")) return DEFAULT_FLUX_MODEL;
+  return "gpt-image-2";
+}
+
+/** Fakes for tests. */
+export interface Services {
+  openai?: () => ImageClient;
+  fetch?: Fetch;
+  pollMs?: number;
+}
+
 /**
  * Returns [message, isError, preview]. Errors are passed back as text so the model
  * can explain them. There's no preview on errors or if the image couldn't be read.
  */
 export async function generateImage(
   args: GenerateArgs,
-  getClient: () => ImageClient = () => (client ??= makeClient() as unknown as ImageClient)
+  services: Services | (() => ImageClient) = {}
 ): Promise<[string, boolean, Preview?]> {
+  if (typeof services === "function") services = { openai: services };
+  const getClient = services.openai ?? (() => (client ??= makeClient() as unknown as ImageClient));
   const quality = args.quality ?? "low";
   const size = args.size ?? "1024x1024";
   const background = args.background ?? "auto";
   let format: Format = args.output_format ?? "png";
-  let model = args.model?.trim() || setting("OPENAI_IMAGE_MODEL") || "gpt-image-2";
+  let model = args.model?.trim() || defaultModel();
+  const flux = isFluxModel(model);
   if (background === "transparent") {
+    if (flux) {
+      return [`ERROR: FLUX models can't make transparent backgrounds. Use an OpenAI model (leave model empty or use "gpt-image-1.5").`, true];
+    }
     if (format === "jpeg") format = "png";
     if (model === "gpt-image-2") model = TRANSPARENT_MODEL;
   }
+  if (flux && !fluxSupported(model)) {
+    return [`ERROR: "${model}" isn't supported. Use flux-3-image, flux-3-image-klein, or a FLUX.2 model such as flux-2-pro.`, true];
+  }
 
-  let result;
+  let image: Buffer;
+  let usage = "";
+  let note = "";
   try {
-    result = await getClient().images.generate({
-      model,
-      prompt: args.prompt,
-      quality,
-      size,
-      background,
-      output_format: format,
-      n: 1,
-    });
+    if (flux) {
+      const result = await generateFlux(
+        model,
+        fluxBody(model, args.prompt, size, format),
+        requireApiKey("bfl"),
+        services.fetch,
+        services.pollMs
+      );
+      image = result.image;
+      if (result.cost != null) usage = `\nFLUX cost: ${result.cost} credits ($${(result.cost / 100).toFixed(2)})`;
+      // FLUX may answer in another format than asked (flux-3-image has no choice): convert, or keep what came
+      const actual = sniffFormat(image);
+      if (actual && actual !== format) {
+        const converted = convertImage(image, actual, format);
+        if (converted) image = converted;
+        else {
+          note = `\nNote: FLUX returned ${actual.toUpperCase()}, which can't be converted to ${format.toUpperCase()} here, so it's saved as ${actual.toUpperCase()}.`;
+          format = actual;
+        }
+      }
+    } else {
+      const result = await getClient().images.generate({
+        model,
+        prompt: args.prompt,
+        quality,
+        size,
+        background,
+        output_format: format,
+        n: 1,
+      });
+      const b64 = result.data?.[0]?.b64_json;
+      if (!b64) return ["ERROR: OpenAI returned no image data", true];
+      image = Buffer.from(b64, "base64");
+      if (result.usage?.total_tokens) usage = `\nOpenAI tokens used: ${result.usage.total_tokens}`;
+    }
   } catch (e) {
     const err = e as Error;
     return [`ERROR (${err?.name ?? "Error"}): ${err?.message ?? String(e)}`, true];
   }
 
-  const b64 = result.data?.[0]?.b64_json;
-  if (!b64) return ["ERROR: OpenAI returned no image data", true];
-
-  const image = Buffer.from(b64, "base64");
   const file = outputFile(args.output_path, format, args.prompt);
   try {
     mkdirSync(path.dirname(file), { recursive: true });
@@ -347,8 +529,7 @@ export async function generateImage(
     return [`ERROR: the image was generated but could not be saved to ${file}: ${(e as Error).message}`, true];
   }
 
-  let info = `Saved: ${file}\nModel: ${model} | quality: ${quality} | size: ${size}`;
-  if (result.usage?.total_tokens) info += `\nOpenAI tokens used: ${result.usage.total_tokens}`;
+  let info = `Saved: ${file}\nModel: ${model} | ${flux ? "" : `quality: ${quality} | `}size: ${size}${usage}${note}`;
 
   let preview: Preview | undefined;
   try {

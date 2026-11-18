@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.3",
   "name": "openai-image-mcp-for-claude",
-  "display_name": "OpenAI Image Generation",
-  "version": "0.4.1",
-  "description": "Generate images with OpenAI (gpt-image) and save them straight to disk.",
-  "long_description": "Gives Claude a generate_image tool that uses the OpenAI Images API. Images are saved to your Pictures folder, or to any folder or file path you name, at full resolution. Claude gets the file path and a small JPEG preview, so it can see the image without a large file filling up the conversation. Quality defaults to low to keep costs down. Transparent backgrounds are supported for logos and icons.",
+  "display_name": "Image Generation (OpenAI & FLUX)",
+  "version": "0.5.0",
+  "description": "Generate images with OpenAI (gpt-image) or FLUX (Black Forest Labs) and save them straight to disk.",
+  "long_description": "Gives Claude a generate_image tool that uses the OpenAI Images API or the FLUX API from Black Forest Labs. You need a key for at least one of them. Images are saved to your Pictures folder, or to any folder or file path you name, at full resolution, and shown large in the chat. Claude gets the file path and a small JPEG preview, so it can see the image without a large file filling up the conversation. OpenAI quality defaults to low to keep costs down. Transparent backgrounds are supported for logos and icons (OpenAI).",
   "author": {
     "name": "Ozcan Isik",
     "url": "https://github.com/Ozaiy"
@@ -16,7 +16,7 @@
   "homepage": "https://github.com/Ozaiy/openai-image-mcp-for-claude",
   "support": "https://github.com/Ozaiy/openai-image-mcp-for-claude/issues",
   "license": "MIT",
-  "keywords": ["openai", "image", "image-generation", "gpt-image", "logo", "illustration"],
+  "keywords": ["openai", "flux", "black-forest-labs", "image", "image-generation", "gpt-image", "logo", "illustration"],
   "server": {
     "type": "node",
     "entry_point": "dist/index.js",
@@ -25,6 +25,7 @@
       "args": ["${__dirname}/dist/index.js"],
       "env": {
         "OPENAI_API_KEY": "${user_config.openai_api_key}",
+        "BFL_API_KEY": "${user_config.bfl_api_key}",
         "OPENAI_IMAGE_OUTPUT_DIR": "${user_config.output_dir}"
       }
     }
@@ -32,16 +33,23 @@
   "tools": [
     {
       "name": "generate_image",
-      "description": "Generate an image with OpenAI and save it to disk. Returns the saved file path and a small preview."
+      "description": "Generate an image with OpenAI or FLUX and save it to disk. Returns the saved file path and a small preview."
     }
   ],
   "user_config": {
     "openai_api_key": {
       "type": "string",
       "title": "OpenAI API key",
-      "description": "Your key from platform.openai.com/api-keys. Claude Desktop stores it in your system keychain. Image generation is billed by OpenAI.",
+      "description": "Your key from platform.openai.com/api-keys, for gpt-image models. Leave empty if you only use FLUX. Claude Desktop stores it in your system keychain. Billed by OpenAI.",
       "sensitive": true,
-      "required": true
+      "required": false
+    },
+    "bfl_api_key": {
+      "type": "string",
+      "title": "FLUX API key (Black Forest Labs)",
+      "description": "Your key from dashboard.bfl.ai, for FLUX models. Leave empty if you only use OpenAI. Claude Desktop stores it in your system keychain. Billed by Black Forest Labs.",
+      "sensitive": true,
+      "required": false
     },
     "output_dir": {
       "type": "directory",

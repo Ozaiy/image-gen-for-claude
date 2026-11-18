@@ -25,6 +25,8 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))  # macOS, Linux
     monkeypatch.setenv("USERPROFILE", str(home))  # Windows
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("BFL_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_IMAGE_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_IMAGE_OUTPUT_DIR", raising=False)
     config = tmp_path / "config"
     monkeypatch.setattr(server, "user_config_dir", lambda *a, **k: str(config / a[0]))
@@ -259,3 +261,112 @@ def test_tool_points_at_the_image_view():
     [view] = asyncio.run(server.mcp.read_resource(server.VIEW_URI))
     assert view.mime_type == "text/html;profile=mcp-app"
     assert "ui/notifications/tool-result" in view.content
+
+
+# ---------- FLUX with a fake Black Forest Labs API ----------
+
+
+class FakeResponse:
+    def __init__(self, status_code, body=None, content=b""):
+        self.status_code = status_code
+        self._body = body
+        self.content = content
+        self.text = json.dumps(body)
+
+    def json(self):
+        if self._body is None:
+            raise ValueError("no JSON")
+        return self._body
+
+
+class FakeBfl:
+    """Answers submit, then `pending` polls, then Ready with a download URL."""
+
+    def __init__(self, image=None, pending=1, status=None, submit_status=None):
+        self.image = image or png_bytes((64, 64))
+        self.pending, self.status, self.submit_status = pending, status, submit_status
+        self.calls = []
+        self.polls = 0
+
+    def __call__(self):
+        return self  # stands in for server._http()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        self.calls.append(("POST", url, headers, json))
+        if self.submit_status:
+            return FakeResponse(self.submit_status, {"detail": "nope"})
+        return FakeResponse(200, {"id": "t1", "polling_url": "https://api.eu.bfl.ai/v1/get_result?id=t1", "cost": 4.8})
+
+    def get(self, url, headers=None):
+        self.calls.append(("GET", url, headers, None))
+        if "get_result" in url:
+            self.polls += 1
+            if self.polls <= self.pending:
+                return FakeResponse(200, {"id": "t1", "status": "Pending" if self.polls == 1 else "Generating"})
+            if self.status:
+                return FakeResponse(503, {"id": "t1", "status": self.status})
+            return FakeResponse(200, {"id": "t1", "status": "Ready", "result": {"sample": "https://delivery.eu.bfl.ai/x.png"}})
+        return FakeResponse(200, content=self.image)
+
+
+@pytest.fixture
+def bfl(out, monkeypatch):
+    monkeypatch.setenv("BFL_API_KEY", "bfl-test-key")
+    monkeypatch.setattr(server.time, "sleep", lambda s: None)
+    fake = FakeBfl()
+    monkeypatch.setattr(server, "_http", fake)
+    return fake
+
+
+def test_flux_is_the_default_with_only_a_flux_key(bfl, monkeypatch):
+    assert server.default_model() == "flux-3-image"
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
+    assert server.default_model() == "gpt-image-2"
+
+
+def test_flux_submits_polls_downloads_and_saves(bfl, out):
+    bfl.pending = 2
+    text, preview = server.generate_image("a cat", size="1536x1024", output_path="flux/cat")
+    method, url, headers, body = bfl.calls[0]
+    assert (method, url) == ("POST", "https://api.bfl.ai/v1/flux-3-image")
+    assert headers["x-key"] == "bfl-test-key"
+    assert body == {"prompt": "a cat", "width": 1536, "height": 1024}  # flux-3-image takes no output_format
+    polls = [c for c in bfl.calls if "get_result" in c[1]]
+    assert len(polls) == 3 and all(c[1].startswith("https://api.eu.bfl.ai") for c in polls)
+    assert "FLUX cost: 4.8 credits ($0.05)" in text and "quality" not in text
+    assert server.image_format((out / "flux" / "cat.png").read_bytes()) == "png"
+    assert preview.to_image_content().mime_type == "image/jpeg"
+
+
+def test_flux_result_is_converted_to_the_format_asked_for(bfl, out):
+    server.generate_image("x", model="flux-3-image", output_format="webp", output_path="conv")
+    assert server.image_format((out / "conv.webp").read_bytes()) == "webp"
+
+
+def test_flux_bodies_per_model():
+    assert server.flux_body("flux-2-pro", "x", "1024x1024", "webp")["output_format"] == "webp"
+    assert server.flux_body("flux-3-image-klein", "x", "1024x1024", "png")["output_format"] == "png"
+    assert "output_format" not in server.flux_body("flux-3-image", "x", "1024x1024", "png")
+
+
+def test_flux_errors_are_clear(bfl, monkeypatch):
+    monkeypatch.setattr(server, "_http", FakeBfl(status="Content Moderated"))
+    assert "Content Moderated" in server.generate_image("x", model="flux-3-image")
+    monkeypatch.setattr(server, "_http", FakeBfl(submit_status=402))
+    assert "not enough credits" in server.generate_image("x", model="flux-3-image")
+    assert "transparent" in server.generate_image("x", model="flux-3-image", background="transparent")
+    assert "isn't supported" in server.generate_image("x", model="flux-pro-1.1")
+
+
+def test_missing_flux_key_says_where_to_put_it(bfl, monkeypatch):
+    monkeypatch.delenv("BFL_API_KEY")
+    text = server.generate_image("x", model="flux-3-image")
+    assert text.startswith("ERROR") and "BFL_API_KEY" in text
+    for path in server.key_files("bfl"):
+        assert str(path) in text

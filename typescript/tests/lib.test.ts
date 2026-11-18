@@ -268,6 +268,105 @@ describe("generate_image", () => {
   });
 });
 
+// ---------- FLUX with a fake Black Forest Labs API ----------
+
+describe("FLUX", () => {
+  beforeEach(() => {
+    fakeHome();
+    process.env.OPENAI_IMAGE_OUTPUT_DIR = path.join(tmp, "out");
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_IMAGE_MODEL;
+    process.env.BFL_API_KEY = "bfl-test-key";
+  });
+
+  const flat = (width: number, height: number) => {
+    const img = new PNG({ width, height });
+    img.data.fill(200);
+    return PNG.sync.write(img);
+  };
+
+  /** A fake BFL API: answers submit, then `pending` polls, then Ready with a download URL. */
+  const fakeBfl = (opts: { image?: Buffer; pending?: number; status?: string; submitStatus?: number } = {}) => {
+    const calls: { url: string; headers?: Record<string, string>; body?: any }[] = [];
+    let polls = 0;
+    const res = (status: number, body: unknown, bytes?: Buffer) => ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+      arrayBuffer: async () => new Uint8Array(bytes ?? Buffer.alloc(0)).buffer,
+    });
+    const fetch: lib.Fetch = async (url, init) => {
+      calls.push({ url, headers: init?.headers, body: init?.body ? JSON.parse(init.body) : undefined });
+      if (init?.method === "POST") {
+        return opts.submitStatus ? res(opts.submitStatus, { detail: "nope" }) : res(200, { id: "t1", polling_url: "https://api.eu.bfl.ai/v1/get_result?id=t1", cost: 4.8 });
+      }
+      if (url.includes("get_result")) {
+        polls++;
+        if (polls <= (opts.pending ?? 1)) return res(200, { id: "t1", status: polls === 1 ? "Pending" : "Generating" });
+        if (opts.status) return res(503, { id: "t1", status: opts.status });
+        return res(200, { id: "t1", status: "Ready", result: { sample: "https://delivery.eu.bfl.ai/x.png" } });
+      }
+      return res(200, null, opts.image ?? flat(64, 64));
+    };
+    return { fetch, calls, pollMs: 1 };
+  };
+
+  test("uses FLUX by default when only a FLUX key is set", () => {
+    assert.equal(lib.defaultModel(), "flux-3-image");
+    process.env.OPENAI_API_KEY = "sk-x";
+    assert.equal(lib.defaultModel(), "gpt-image-2");
+  });
+
+  test("submits, polls the given URL, downloads and saves", async () => {
+    const bfl = fakeBfl({ pending: 2 });
+    const [text, isError, preview] = await lib.generateImage({ prompt: "a cat", size: "1536x1024", output_path: "flux/cat" }, bfl);
+    assert.equal(isError, false, text);
+    const submit = bfl.calls[0];
+    assert.equal(submit.url, "https://api.bfl.ai/v1/flux-3-image");
+    assert.equal(submit.headers?.["x-key"], "bfl-test-key");
+    assert.deepEqual(submit.body, { prompt: "a cat", width: 1536, height: 1024 }); // flux-3-image takes no output_format
+    assert.equal(bfl.calls.filter((c) => c.url.includes("get_result")).length, 3);
+    assert.ok(bfl.calls.every((c) => !c.url.includes("get_result") || c.url.startsWith("https://api.eu.bfl.ai")));
+    assert.match(text, /FLUX cost: 4.8 credits \(\$0\.05\)/);
+    assert.doesNotMatch(text, /quality/);
+    assert.equal(lib.sniffFormat(readFileSync(path.join(tmp, "out", "flux", "cat.png"))), "png");
+    assert.equal(preview?.mimeType, "image/jpeg");
+  });
+
+  test("converts what FLUX returns to the format asked for", async () => {
+    const [text] = await lib.generateImage({ prompt: "x", model: "flux-3-image", output_format: "jpeg", output_path: "conv" }, fakeBfl());
+    assert.equal(lib.sniffFormat(readFileSync(path.join(tmp, "out", "conv.jpeg"))), "jpeg", text);
+  });
+
+  test("FLUX.2 and Klein get output_format", () => {
+    assert.equal(lib.fluxBody("flux-2-pro", "x", "1024x1024", "webp").output_format, "webp");
+    assert.equal(lib.fluxBody("flux-3-image-klein", "x", "1024x1024", "png").output_format, "png");
+    assert.equal(lib.fluxBody("flux-3-image", "x", "1024x1024", "png").output_format, undefined);
+  });
+
+  test("moderation, credits and transparency come back as clear errors", async () => {
+    let [text, isError] = await lib.generateImage({ prompt: "x", model: "flux-3-image" }, fakeBfl({ status: "Content Moderated" }));
+    assert.equal(isError, true);
+    assert.match(text, /Content Moderated/);
+    [text] = await lib.generateImage({ prompt: "x", model: "flux-3-image" }, fakeBfl({ submitStatus: 402 }));
+    assert.match(text, /not enough credits/);
+    [text, isError] = await lib.generateImage({ prompt: "x", model: "flux-3-image", background: "transparent" }, fakeBfl());
+    assert.equal(isError, true);
+    assert.match(text, /transparent/);
+    [text] = await lib.generateImage({ prompt: "x", model: "flux-pro-1.1" }, fakeBfl());
+    assert.match(text, /isn't supported/);
+  });
+
+  test("a missing FLUX key says where to put it", async () => {
+    delete process.env.BFL_API_KEY;
+    const [text, isError] = await lib.generateImage({ prompt: "x", model: "flux-3-image" }, fakeBfl());
+    assert.equal(isError, true);
+    assert.match(text, /BFL_API_KEY/);
+    for (const file of lib.keyFiles("bfl")) assert.ok(text.includes(file));
+  });
+});
+
 // ---------- versions stay in sync ----------
 
 test("version matches package.json and manifest.json", () => {
