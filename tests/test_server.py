@@ -3,8 +3,10 @@
 import base64
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -179,17 +181,40 @@ def test_generate_image_saves_file(out, monkeypatch):
 
 
 def test_server_lists_tool_over_stdio():
-    messages = [
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2025-06-18", "capabilities": {},
-            "clientInfo": {"name": "test", "version": "0"}}},
-        {"jsonrpc": "2.0", "method": "notifications/initialized"},
-        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-    ]
-    proc = subprocess.run(
+    # Like a real client: keep stdin open and wait for each reply. Closing stdin early
+    # makes the server shut down, sometimes before it answers (seen on macOS).
+    proc = subprocess.Popen(
         [sys.executable, "-m", "openai_image_mcp.server"],
-        input="".join(json.dumps(m) + "\n" for m in messages),
-        capture_output=True, text=True, timeout=60,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
-    replies = {r.get("id"): r for r in map(json.loads, proc.stdout.splitlines()) if r.get("id")}
-    assert [t["name"] for t in replies[2]["result"]["tools"]] == ["generate_image"], proc.stderr
+    lines = queue.Queue()
+    # A thread, because select() doesn't work on pipes on Windows
+    threading.Thread(target=lambda: [lines.put(l) for l in proc.stdout], daemon=True).start()
+
+    def send(message):
+        proc.stdin.write(json.dumps(message) + "\n")
+        proc.stdin.flush()
+
+    def reply(id):
+        while True:
+            message = json.loads(lines.get(timeout=30))
+            if message.get("id") == id:
+                return message
+
+    try:
+        send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "test", "version": "0"}}})
+        reply(1)
+        send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        tools = reply(2)["result"]["tools"]
+        assert [t["name"] for t in tools] == ["generate_image"]
+    finally:
+        proc.stdin.close()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        proc.stdout.close()
+        proc.stderr.close()
