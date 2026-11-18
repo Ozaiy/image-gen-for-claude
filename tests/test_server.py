@@ -186,7 +186,7 @@ def test_generate_image_saves_file_and_returns_preview(out, monkeypatch):
     monkeypatch.setattr(server, "client", lambda: fake_client(png))
     text, preview = server.generate_image("a test image", output_path="sub/test")
     saved = out / "sub" / "test.png"
-    assert text.startswith(f"Saved: {saved}")
+    assert text.startswith(f"Saved: {saved}\nLink: {saved.absolute().as_uri()}\n")
     assert saved.read_bytes() == png  # full resolution on disk
 
     content = preview.to_image_content()

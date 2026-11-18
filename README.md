@@ -4,7 +4,7 @@ An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any MCP cl
 
 Images are saved to disk at full resolution, straight into the project the model is working on if it names a path. The model gets back the file path and a small JPEG preview (at most 1024px, quality 80), so it can see what it made without a multi-megabyte image filling up the conversation.
 
-In Claude Desktop and claude.ai the image is also shown large, right in the chat, and Claude tells you the saved path in its reply. Click the image to view it full screen.
+In Claude Desktop and claude.ai the image is also shown large, right in the chat. Click the image to view it full screen. In every client Claude gives you the saved path in its reply as a clickable link (the tool result includes a `file:///` URL for it), so in Claude Code you can click it to open the image: in VS Code it opens in an editor tab, and in a terminal that supports links it opens in your image viewer.
 
 ## What it does
 

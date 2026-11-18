@@ -1,6 +1,6 @@
 [project]
 name = "openai-image-mcp"
-version = "0.5.0"
+version = "0.5.1"
 description = "MCP server that generates images with the OpenAI Images API and saves them to disk"
 readme = "README.md"
 license = "MIT"

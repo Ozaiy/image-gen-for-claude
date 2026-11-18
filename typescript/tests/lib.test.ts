@@ -8,7 +8,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 import * as lib from "../src/lib.ts";
@@ -219,7 +219,7 @@ describe("generate_image", () => {
     const [text, isError, preview] = await lib.generateImage({ prompt: "a test image", output_path: "sub/test" }, fake());
     const saved = path.join(tmp, "out", "sub", "test.png");
     assert.equal(isError, false);
-    assert.ok(text.startsWith(`Saved: ${saved}`), text);
+    assert.ok(text.startsWith(`Saved: ${saved}\nLink: ${pathToFileURL(saved).href}\n`), text);
     assert.match(text, /tokens used: 42/);
     assert.deepEqual(readFileSync(saved), png); // full resolution on disk
     const small = decodePreview(preview);

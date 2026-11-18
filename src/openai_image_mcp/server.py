@@ -324,7 +324,9 @@ def generate_image(
     """Generate an image with OpenAI (gpt-image) or Black Forest Labs (FLUX) and save
     it to disk. Returns the saved file path and a small JPEG preview of the image
     (the saved file is full resolution).
-    In your reply, always give the user the full path of the saved file.
+    In your reply, always give the user the saved file as a markdown link: the
+    full path from "Saved:" as the text and the URL from "Link:" as the target,
+    so they can click it to open the image.
 
     model: leave empty for the default (OpenAI gpt-image-2 if an OpenAI key is set
            up, otherwise FLUX flux-3-image). Use a FLUX model when the user asks for
@@ -396,7 +398,7 @@ def generate_image(
         return f"ERROR: the image was generated but could not be saved to {path}: {e}"
 
     details = f"size: {size}" if flux else f"quality: {quality} | size: {size}"
-    info = f"Saved: {path}\nModel: {model} | {details}{usage}"
+    info = f"Saved: {path}\nLink: {path.absolute().as_uri()}\nModel: {model} | {details}{usage}"
 
     try:
         preview = preview_jpeg(image)

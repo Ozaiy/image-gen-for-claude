@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "openai-image-mcp-for-claude",
   "display_name": "Image Generation (OpenAI & FLUX)",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Generate images with OpenAI (gpt-image) or FLUX (Black Forest Labs) and save them straight to disk.",
   "long_description": "Gives Claude a generate_image tool that uses the OpenAI Images API or the FLUX API from Black Forest Labs. You need a key for at least one of them. Images are saved to your Pictures folder, or to any folder or file path you name, at full resolution, and shown large in the chat. Claude gets the file path and a small JPEG preview, so it can see the image without a large file filling up the conversation. OpenAI quality defaults to low to keep costs down. Transparent backgrounds are supported for logos and icons (OpenAI).",
   "author": {

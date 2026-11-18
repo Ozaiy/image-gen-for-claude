@@ -7,11 +7,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import jpeg from "jpeg-js";
 import OpenAI from "openai";
 import { PNG } from "pngjs";
 
-export const VERSION = "0.5.0";
+export const VERSION = "0.5.1";
 export const TRANSPARENT_MODEL = "gpt-image-1.5"; // gpt-image-2 can't do transparent backgrounds
 const IMAGE_SUFFIXES = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const isWindows = process.platform === "win32";
@@ -389,7 +390,9 @@ export async function generateFlux(
 export const TOOL_DESCRIPTION = `Generate an image with OpenAI (gpt-image) or Black Forest Labs (FLUX) and save
 it to disk. Returns the saved file path and a small JPEG preview of the image
 (the saved file is full resolution).
-In your reply, always give the user the full path of the saved file.
+In your reply, always give the user the saved file as a markdown link: the
+full path from "Saved:" as the text and the URL from "Link:" as the target,
+so they can click it to open the image.
 
 model: leave empty for the default (OpenAI gpt-image-2 if an OpenAI key is set
        up, otherwise FLUX flux-3-image). Use a FLUX model when the user asks for
@@ -529,7 +532,7 @@ export async function generateImage(
     return [`ERROR: the image was generated but could not be saved to ${file}: ${(e as Error).message}`, true];
   }
 
-  let info = `Saved: ${file}\nModel: ${model} | ${flux ? "" : `quality: ${quality} | `}size: ${size}${usage}${note}`;
+  let info = `Saved: ${file}\nLink: ${pathToFileURL(file).href}\nModel: ${model} | ${flux ? "" : `quality: ${quality} | `}size: ${size}${usage}${note}`;
 
   let preview: Preview | undefined;
   try {
