@@ -2,13 +2,13 @@
 
 An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any MCP client) generate images with the OpenAI Images API. Works on Windows, macOS and Linux.
 
-Images are saved to disk and only the file path goes back to the model, so no image data ends up in the conversation.
+Images are saved to disk at full resolution. The model gets back the file path and a small JPEG preview (at most 1024px, quality 80), so it can see what it made without a multi-megabyte image filling up the conversation.
 
 **Full documentation:** https://github.com/Ozaiy/openai-image-mcp-for-claude
 
 ## Install
 
-**Claude Desktop:** download the `.mcpb` file from the [latest release](https://github.com/Ozaiy/openai-image-mcp-for-claude/releases/latest) and double-click it. Nothing else to install; Claude Desktop asks for your OpenAI API key and keeps it in your system keychain.
+**Claude Desktop:** download the `.mcpb` file from the [latest release](https://github.com/Ozaiy/openai-image-mcp-for-claude/releases/latest) then open Claude Desktop, go to **Settings**, search for "extensions", open **Extensions** and drag the file onto that page (on Windows, double-clicking it doesn't install it). Nothing else to install; Claude Desktop asks for your OpenAI API key and keeps it in your system keychain.
 
 **Claude Code** (needs Node.js 20 or newer):
 

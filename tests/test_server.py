@@ -1,6 +1,7 @@
 """Tests for paths and API key loading. GitHub Actions runs these on Windows, macOS and Linux."""
 
 import base64
+import io
 import json
 import os
 import queue
@@ -11,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image as PILImage
 
 from openai_image_mcp import server
 
@@ -161,20 +163,48 @@ def test_env_output_dir_with_tilde(home, monkeypatch):
 # ---------- full tool call with a fake OpenAI client ----------
 
 
-def test_generate_image_saves_file(out, monkeypatch):
-    png = b"\x89PNG\r\n\x1a\nfake"
-    fake = SimpleNamespace(
+def fake_client(image: bytes):
+    return SimpleNamespace(
         images=SimpleNamespace(
             generate=lambda **kw: SimpleNamespace(
-                data=[SimpleNamespace(b64_json=base64.b64encode(png).decode())], usage=None
+                data=[SimpleNamespace(b64_json=base64.b64encode(image).decode())], usage=None
             )
         )
     )
-    monkeypatch.setattr(server, "client", lambda: fake)
-    result = server.generate_image("a test image", output_path="sub/test")
+
+
+def png_bytes(size, mode="RGB", color=(200, 30, 30)):
+    buf = io.BytesIO()
+    PILImage.new(mode, size, color).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_generate_image_saves_file_and_returns_preview(out, monkeypatch):
+    png = png_bytes((1536, 1024))
+    monkeypatch.setattr(server, "client", lambda: fake_client(png))
+    text, preview = server.generate_image("a test image", output_path="sub/test")
     saved = out / "sub" / "test.png"
-    assert result.startswith(f"Saved: {saved}")
-    assert saved.read_bytes() == png
+    assert text.startswith(f"Saved: {saved}")
+    assert saved.read_bytes() == png  # full resolution on disk
+
+    content = preview.to_image_content()
+    assert content.mime_type == "image/jpeg"
+    with PILImage.open(io.BytesIO(base64.b64decode(content.data))) as img:
+        assert img.format == "JPEG" and img.size == (1024, 683)
+
+
+def test_preview_of_transparent_image_is_jpeg():
+    jpeg = server.preview_jpeg(png_bytes((1024, 1536), "RGBA", (0, 0, 0, 0)))
+    with PILImage.open(io.BytesIO(jpeg)) as img:
+        assert img.format == "JPEG" and img.size == (683, 1024)
+        assert img.getpixel((10, 10)) == (255, 255, 255)  # transparent -> white
+
+
+def test_unreadable_image_is_still_saved(out, monkeypatch):
+    monkeypatch.setattr(server, "client", lambda: fake_client(b"not an image"))
+    result = server.generate_image("x", output_path="broken")
+    assert isinstance(result, str) and "No preview" in result
+    assert (out / "broken.png").read_bytes() == b"not an image"
 
 
 # ---------- the server starts and speaks MCP ----------

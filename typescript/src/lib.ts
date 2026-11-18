@@ -7,12 +7,18 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import jpeg from "jpeg-js";
 import OpenAI from "openai";
+import { PNG } from "pngjs";
 
 export const VERSION = "0.2.0";
 export const TRANSPARENT_MODEL = "gpt-image-1.5"; // gpt-image-2 can't do transparent backgrounds
 const IMAGE_SUFFIXES = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const isWindows = process.platform === "win32";
+export const PREVIEW_MAX_SIDE = 1024; // px; the full-resolution image stays on disk
+export const PREVIEW_QUALITY = 80;
+/** WebP can't be decoded without a native library, so a WebP is sent as-is, and only when it's this small. */
+const MAX_WEBP_PREVIEW_BYTES = 512 * 1024;
 
 export type Quality = "low" | "medium" | "high";
 export type Size = "1024x1024" | "1536x1024" | "1024x1536";
@@ -188,9 +194,72 @@ export function outputFile(outputPath: string | undefined, format: Format, promp
   return p;
 }
 
+// ---------- preview ----------
+
+export interface Preview {
+  data: string; // base64
+  mimeType: "image/jpeg" | "image/webp";
+}
+
+/**
+ * Shrink RGBA pixels so the longest side is at most maxSide, averaging each block of
+ * source pixels. Transparent areas become white, because JPEG has no alpha channel.
+ */
+export function downscale(src: Uint8Array, width: number, height: number, maxSide = PREVIEW_MAX_SIDE) {
+  const scale = Math.min(1, maxSide / Math.max(width, height));
+  const w = Math.max(1, Math.round(width * scale));
+  const h = Math.max(1, Math.round(height * scale));
+  const out = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.floor((y * height) / h);
+    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * height) / h));
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.floor((x * width) / w);
+      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * width) / w));
+      let r = 0, g = 0, b = 0;
+      for (let sy = y0; sy < y1; sy++) {
+        for (let sx = x0; sx < x1; sx++) {
+          const i = (sy * width + sx) * 4;
+          const a = src[i + 3] / 255;
+          const white = 255 * (1 - a);
+          r += src[i] * a + white;
+          g += src[i + 1] * a + white;
+          b += src[i + 2] * a + white;
+        }
+      }
+      const n = (y1 - y0) * (x1 - x0);
+      const o = (y * w + x) * 4;
+      out[o] = Math.round(r / n);
+      out[o + 1] = Math.round(g / n);
+      out[o + 2] = Math.round(b / n);
+      out[o + 3] = 255;
+    }
+  }
+  return { data: out, width: w, height: h };
+}
+
+/**
+ * A small image for the model to look at: a JPEG at most PREVIEW_MAX_SIDE px,
+ * quality PREVIEW_QUALITY. A WebP is sent unchanged if it's small, otherwise
+ * there's no preview (undefined).
+ */
+export function makePreview(image: Buffer, format: Format): Preview | undefined {
+  if (format === "webp") {
+    if (image.length > MAX_WEBP_PREVIEW_BYTES) return undefined;
+    return { data: image.toString("base64"), mimeType: "image/webp" };
+  }
+  const decoded =
+    format === "png"
+      ? PNG.sync.read(image)
+      : jpeg.decode(image, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 1024 });
+  const small = downscale(decoded.data, decoded.width, decoded.height);
+  return { data: Buffer.from(jpeg.encode(small, PREVIEW_QUALITY).data).toString("base64"), mimeType: "image/jpeg" };
+}
+
 // ---------- the tool ----------
 
-export const TOOL_DESCRIPTION = `Generate an image with OpenAI and save it to disk. Returns the saved file path.
+export const TOOL_DESCRIPTION = `Generate an image with OpenAI and save it to disk. Returns the saved file
+path and a small JPEG preview of the image (the saved file is full resolution).
 
 QUALITY - choose carefully, higher quality costs much more:
   - "low"    (default) drafts, previews, trying out ideas, placeholders.
@@ -230,11 +299,14 @@ export interface ImageClient {
 
 let client: ImageClient | undefined;
 
-/** Returns [message, isError]. Errors are passed back as text so the model can explain them. */
+/**
+ * Returns [message, isError, preview]. Errors are passed back as text so the model
+ * can explain them. There's no preview on errors or if the image couldn't be read.
+ */
 export async function generateImage(
   args: GenerateArgs,
   getClient: () => ImageClient = () => (client ??= makeClient() as unknown as ImageClient)
-): Promise<[string, boolean]> {
+): Promise<[string, boolean, Preview?]> {
   const quality = args.quality ?? "low";
   const size = args.size ?? "1024x1024";
   const background = args.background ?? "auto";
@@ -264,10 +336,11 @@ export async function generateImage(
   const b64 = result.data?.[0]?.b64_json;
   if (!b64) return ["ERROR: OpenAI returned no image data", true];
 
+  const image = Buffer.from(b64, "base64");
   const file = outputFile(args.output_path, format, args.prompt);
   try {
     mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, Buffer.from(b64, "base64"));
+    writeFileSync(file, image);
   } catch (e) {
     // e.g. no permission, or a name Windows doesn't allow
     return [`ERROR: the image was generated but could not be saved to ${file}: ${(e as Error).message}`, true];
@@ -275,5 +348,15 @@ export async function generateImage(
 
   let info = `Saved: ${file}\nModel: ${model} | quality: ${quality} | size: ${size}`;
   if (result.usage?.total_tokens) info += `\nOpenAI tokens used: ${result.usage.total_tokens}`;
-  return [info, false];
+
+  let preview: Preview | undefined;
+  try {
+    preview = makePreview(image, format);
+  } catch (e) {
+    // the file is saved; a missing preview shouldn't fail the call
+    return [`${info}\n(No preview: ${(e as Error).message})`, false];
+  }
+  if (!preview) return [`${info}\n(No preview: the WebP is too large to send. Open the saved file to see it.)`, false];
+  const kind = preview.mimeType === "image/jpeg" ? "small JPEG" : "the WebP as saved";
+  return [`${info}\nPreview below (${kind}; the saved file is full resolution).`, false, preview];
 }

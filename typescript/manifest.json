@@ -4,7 +4,7 @@
   "display_name": "OpenAI Image Generation",
   "version": "0.2.0",
   "description": "Generate images with OpenAI (gpt-image) and save them straight to disk.",
-  "long_description": "Gives Claude a generate_image tool that uses the OpenAI Images API. Images are saved to your Pictures folder, or to any folder or file path you name, and only the file path goes back to Claude, so no image data fills up the conversation. Quality defaults to low to keep costs down. Transparent backgrounds are supported for logos and icons.",
+  "long_description": "Gives Claude a generate_image tool that uses the OpenAI Images API. Images are saved to your Pictures folder, or to any folder or file path you name, at full resolution. Claude gets the file path and a small JPEG preview, so it can see the image without a large file filling up the conversation. Quality defaults to low to keep costs down. Transparent backgrounds are supported for logos and icons.",
   "author": {
     "name": "Ozcan Isik",
     "url": "https://github.com/Ozaiy"
@@ -32,7 +32,7 @@
   "tools": [
     {
       "name": "generate_image",
-      "description": "Generate an image with OpenAI and save it to disk. Returns the saved file path."
+      "description": "Generate an image with OpenAI and save it to disk. Returns the saved file path and a small preview."
     }
   ],
   "user_config": {

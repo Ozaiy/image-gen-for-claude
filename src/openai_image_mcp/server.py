@@ -1,8 +1,9 @@
 """OpenAI image generation MCP server.
 
 Gives an MCP client (such as Claude) a `generate_image` tool. Images are saved
-to disk (default: your Pictures folder) and only the file path is returned, so
-image data never fills up the conversation.
+to disk (default: your Pictures folder) at full resolution. The tool returns the
+file path plus a small JPEG preview (at most 1024px, quality 80), so the model
+can see the result without a multi-megabyte image filling up the conversation.
 
 Works on Windows, macOS and Linux.
 
@@ -20,19 +21,23 @@ Optional env vars:
 
 import base64
 import codecs
+import io
 import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Image, MCPServer
 from openai import OpenAI
+from PIL import Image as PILImage
 from platformdirs import user_config_dir, user_pictures_dir
 
 DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2")
 TRANSPARENT_MODEL = "gpt-image-1.5"  # gpt-image-2 can't do transparent backgrounds
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+PREVIEW_MAX_SIDE = 1024  # px; the full-resolution image stays on disk
+PREVIEW_QUALITY = 80
 
 mcp = MCPServer("openai-image")
 _client = None
@@ -131,6 +136,25 @@ def output_file(output_path: str | None, output_format: str, prompt: str) -> Pat
     return path
 
 
+def preview_jpeg(data: bytes) -> bytes:
+    """A small JPEG of the image for the model to look at.
+
+    Longest side at most PREVIEW_MAX_SIDE. Transparent areas become white,
+    because JPEG has no alpha channel.
+    """
+    with PILImage.open(io.BytesIO(data)) as img:
+        img.thumbnail((PREVIEW_MAX_SIDE, PREVIEW_MAX_SIDE), PILImage.Resampling.LANCZOS)
+        if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
+            rgba = img.convert("RGBA")
+            img = PILImage.new("RGB", rgba.size, "white")
+            img.paste(rgba, mask=rgba.getchannel("A"))
+        else:
+            img = img.convert("RGB")
+        out = io.BytesIO()
+        img.save(out, "JPEG", quality=PREVIEW_QUALITY, optimize=True)
+        return out.getvalue()
+
+
 @mcp.tool()
 def generate_image(
     prompt: str,
@@ -140,8 +164,9 @@ def generate_image(
     output_format: Literal["png", "jpeg", "webp"] = "png",
     output_path: str | None = None,
     model: str | None = None,
-) -> str:
-    """Generate an image with OpenAI and save it to disk. Returns the saved file path.
+) -> str | list[str | Image]:
+    """Generate an image with OpenAI and save it to disk. Returns the saved file
+    path and a small JPEG preview of the image (the saved file is full resolution).
 
     QUALITY - choose carefully, higher quality costs much more:
       - "low"    (default) drafts, previews, trying out ideas, placeholders.
@@ -179,10 +204,11 @@ def generate_image(
     except Exception as e:  # pass the real reason back to the client
         return f"ERROR ({type(e).__name__}): {e}"
 
+    image = base64.b64decode(result.data[0].b64_json)
     path = output_file(output_path, output_format, prompt)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(base64.b64decode(result.data[0].b64_json))
+        path.write_bytes(image)
     except OSError as e:  # e.g. no permission, or a name Windows doesn't allow
         return f"ERROR: the image was generated but could not be saved to {path}: {e}"
 
@@ -190,7 +216,13 @@ def generate_image(
     usage = getattr(result, "usage", None)
     if usage and getattr(usage, "total_tokens", None):
         info += f"\nOpenAI tokens used: {usage.total_tokens}"
-    return info
+
+    try:
+        preview = preview_jpeg(image)
+    except Exception as e:  # the file is saved; a missing preview shouldn't fail the call
+        return info + f"\n(No preview: {e})"
+    info += "\nPreview below (small JPEG; the saved file is full resolution)."
+    return [info, Image(data=preview, format="jpeg")]
 
 
 def main() -> None:

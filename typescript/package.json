@@ -42,8 +42,11 @@
     "@anthropic-ai/mcpb": "2.1.2",
     "@modelcontextprotocol/sdk": "1.32.2",
     "@types/node": "22.20.5",
+    "@types/pngjs": "6.0.5",
     "esbuild": "0.28.2",
+    "jpeg-js": "0.4.4",
     "openai": "7.50.0",
+    "pngjs": "7.0.0",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "zod": "4.6.7"

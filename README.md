@@ -2,7 +2,7 @@
 
 An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any MCP client) generate images with the OpenAI Images API. Works on Windows, macOS and Linux.
 
-Images are saved to disk and only the file path goes back to the model, so no image data ends up in the conversation. That keeps the context small and lets the model save images straight into the project it's working on.
+Images are saved to disk at full resolution, straight into the project the model is working on if it names a path. The model gets back the file path and a small JPEG preview (at most 1024px, quality 80), so it can see what it made without a multi-megabyte image filling up the conversation.
 
 ## What it does
 
@@ -22,6 +22,7 @@ Some details:
 
 - **Quality defaults to `low`** because higher quality costs a lot more. The tool description tells the model to use `high` only for final images you asked for.
 - **Transparent backgrounds** switch to `gpt-image-1.5`, because `gpt-image-2` doesn't support them. JPEG is changed to PNG, since JPEG can't be transparent.
+- **The preview** is a JPEG with its longest side at most 1024px, sent as `image/jpeg`. Transparent areas show as white in it; the saved file keeps its transparency. In the npx and Claude Desktop versions a WebP can't be shrunk, so it's sent unchanged (`image/webp`) when it's under 512 KB and left out when it's bigger.
 - **If OpenAI returns an error**, the server passes the reason back to the model as text, so it can tell you what went wrong.
 
 ### Where images are saved
@@ -47,7 +48,7 @@ You also need an [OpenAI API key](https://platform.openai.com/api-keys) with acc
 ### Option 1: Claude Desktop extension
 
 1. Download `openai-image-mcp-for-claude-<version>.mcpb` from the [latest release](https://github.com/Ozaiy/openai-image-mcp-for-claude/releases/latest).
-2. Double-click it, or open Claude Desktop and go to **Settings → Extensions → Advanced settings → Install Extension**, then pick the file.
+2. Open Claude Desktop, go to **Settings**, search for "extensions" and open **Extensions**. Drag the `.mcpb` file onto that page. (On Windows, double-clicking the file doesn't install it.)
 3. Enter your OpenAI API key when asked. Claude Desktop stores it in your system keychain (Keychain on macOS, Credential Manager on Windows). You can also choose a save folder there; leave it empty for your Pictures folder.
 
 It runs on the Node.js that ships with Claude Desktop, so there's nothing else to install, and you don't need the API key file described below.
@@ -166,7 +167,7 @@ If the key can't be found, the tool's error message lists the exact paths it che
 
 ### Try it
 
-Ask Claude something like *"Generate a low-quality draft of a logo for a coffee shop called Bean There, transparent background"*. It replies with the path of the saved file.
+Ask Claude something like *"Generate a low-quality draft of a logo for a coffee shop called Bean There, transparent background"*. It replies with the path of the saved file and can see a preview of the image.
 
 ## Settings
 

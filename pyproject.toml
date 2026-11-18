@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 dependencies = [
     "mcp>=2.3,<3",
     "openai>=3,<4",
+    "pillow>=10",
     "platformdirs>=4.3",
 ]
 keywords = ["mcp", "openai", "image-generation", "claude", "gpt-image"]

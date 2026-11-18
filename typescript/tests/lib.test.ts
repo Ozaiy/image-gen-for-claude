@@ -9,6 +9,8 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import jpeg from "jpeg-js";
+import { PNG } from "pngjs";
 import * as lib from "../src/lib.ts";
 
 const isWindows = process.platform === "win32";
@@ -191,23 +193,64 @@ describe("generate_image", () => {
     process.env.OPENAI_IMAGE_OUTPUT_DIR = path.join(tmp, "out");
   });
 
-  const png = Buffer.from("\x89PNG\r\n\x1a\nfake", "latin1");
-  const fake = (seen: Record<string, unknown>[] = []) => () => ({
+  /** A solid-color PNG. */
+  const makePng = (width: number, height: number, rgba: [number, number, number, number]) => {
+    const img = new PNG({ width, height });
+    for (let i = 0; i < img.data.length; i += 4) img.data.set(rgba, i);
+    return PNG.sync.write(img);
+  };
+  const decodePreview = (preview: lib.Preview | undefined) => {
+    assert.ok(preview);
+    assert.equal(preview.mimeType, "image/jpeg");
+    return jpeg.decode(Buffer.from(preview.data, "base64"), { useTArray: true });
+  };
+
+  const png = makePng(1536, 1024, [200, 30, 30, 255]);
+  const fake = (seen: Record<string, unknown>[] = [], image = png) => () => ({
     images: {
       generate: async (params: Record<string, unknown>) => {
         seen.push(params);
-        return { data: [{ b64_json: png.toString("base64") }], usage: { total_tokens: 42 } };
+        return { data: [{ b64_json: image.toString("base64") }], usage: { total_tokens: 42 } };
       },
     },
   });
 
-  test("saves the file and reports it", async () => {
-    const [text, isError] = await lib.generateImage({ prompt: "a test image", output_path: "sub/test" }, fake());
+  test("saves the full image and returns a small JPEG preview", async () => {
+    const [text, isError, preview] = await lib.generateImage({ prompt: "a test image", output_path: "sub/test" }, fake());
     const saved = path.join(tmp, "out", "sub", "test.png");
     assert.equal(isError, false);
     assert.ok(text.startsWith(`Saved: ${saved}`), text);
     assert.match(text, /tokens used: 42/);
-    assert.deepEqual(readFileSync(saved), png);
+    assert.deepEqual(readFileSync(saved), png); // full resolution on disk
+    const small = decodePreview(preview);
+    assert.deepEqual([small.width, small.height], [1024, 683]);
+  });
+
+  test("preview of a transparent image is white where it was transparent", () => {
+    const small = decodePreview(lib.makePreview(makePng(1024, 1536, [0, 0, 0, 0]), "png"));
+    assert.deepEqual([small.width, small.height], [683, 1024]);
+    assert.ok(small.data[0] > 250 && small.data[1] > 250 && small.data[2] > 250);
+  });
+
+  test("a JPEG is shrunk to a JPEG preview", () => {
+    const big = jpeg.encode({ data: Buffer.alloc(1536 * 1024 * 4, 128), width: 1536, height: 1024 }, 90).data;
+    const small = decodePreview(lib.makePreview(Buffer.from(big), "jpeg"));
+    assert.deepEqual([small.width, small.height], [1024, 683]);
+  });
+
+  test("a small WebP is sent as-is with its own mimeType", () => {
+    const webp = Buffer.from("RIFF....WEBPVP8 ", "latin1");
+    assert.deepEqual(lib.makePreview(webp, "webp"), { data: webp.toString("base64"), mimeType: "image/webp" });
+    assert.equal(lib.makePreview(Buffer.alloc(600 * 1024), "webp"), undefined);
+  });
+
+  test("an unreadable image is still saved, just without a preview", async () => {
+    const broken = Buffer.from("not an image");
+    const [text, isError, preview] = await lib.generateImage({ prompt: "x", output_path: "broken" }, fake([], broken));
+    assert.equal(isError, false);
+    assert.equal(preview, undefined);
+    assert.match(text, /No preview/);
+    assert.deepEqual(readFileSync(path.join(tmp, "out", "broken.png")), broken);
   });
 
   test("transparent switches model and jpeg to png", async () => {

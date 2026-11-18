@@ -22,8 +22,12 @@ server.registerTool(
     },
   },
   async (args) => {
-    const [text, isError] = await generateImage(args);
-    return { content: [{ type: "text", text }], isError };
+    const [text, isError, preview] = await generateImage(args);
+    const content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[] = [
+      { type: "text", text },
+    ];
+    if (preview) content.push({ type: "image", data: preview.data, mimeType: preview.mimeType });
+    return { content, isError };
   }
 );
 
