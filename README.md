@@ -1,4 +1,4 @@
-# openai-image-mcp
+# openai-image-mcp-for-claude
 
 An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any MCP client) generate images with the OpenAI Images API. Works on Windows, macOS and Linux.
 
@@ -82,7 +82,7 @@ If the key can't be found, the tool's error message lists the exact paths it che
 **Claude Code** (all platforms):
 
 ```sh
-claude mcp add openai-image --scope user -- uvx --from git+https://github.com/Ozaiy/openai-image-mcp openai-image-mcp
+claude mcp add openai-image --scope user -- uvx --from git+https://github.com/Ozaiy/openai-image-mcp-for-claude openai-image-mcp
 ```
 
 **Claude Desktop**, and other clients with an `mcpServers` JSON config. Claude Desktop's config file is in:
@@ -95,7 +95,7 @@ claude mcp add openai-image --scope user -- uvx --from git+https://github.com/Oz
   "mcpServers": {
     "openai-image": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/Ozaiy/openai-image-mcp", "openai-image-mcp"]
+      "args": ["--from", "git+https://github.com/Ozaiy/openai-image-mcp-for-claude", "openai-image-mcp"]
     }
   }
 }
@@ -112,14 +112,14 @@ Restart Claude Desktop after changing it.
 ```sh
 # macOS / Linux
 python3 -m venv ~/.venvs/openai-image-mcp
-~/.venvs/openai-image-mcp/bin/pip install git+https://github.com/Ozaiy/openai-image-mcp
+~/.venvs/openai-image-mcp/bin/pip install git+https://github.com/Ozaiy/openai-image-mcp-for-claude
 # command: /Users/me/.venvs/openai-image-mcp/bin/openai-image-mcp
 ```
 
 ```powershell
 # Windows
 py -m venv $HOME\.venvs\openai-image-mcp
-& $HOME\.venvs\openai-image-mcp\Scripts\pip install git+https://github.com/Ozaiy/openai-image-mcp
+& $HOME\.venvs\openai-image-mcp\Scripts\pip install git+https://github.com/Ozaiy/openai-image-mcp-for-claude
 # command: C:\Users\me\.venvs\openai-image-mcp\Scripts\openai-image-mcp.exe
 ```
 
@@ -142,8 +142,8 @@ In Claude Code you can set these with `-e`, for example `claude mcp add openai-i
 ## Development
 
 ```sh
-git clone https://github.com/Ozaiy/openai-image-mcp
-cd openai-image-mcp
+git clone https://github.com/Ozaiy/openai-image-mcp-for-claude
+cd openai-image-mcp-for-claude
 python3 -m venv .venv
 .venv/bin/pip install -e ".[test]"     # Windows: .venv\Scripts\pip install -e ".[test]"
 .venv/bin/python -m pytest             # Windows: .venv\Scripts\python -m pytest

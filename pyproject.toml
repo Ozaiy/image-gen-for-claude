@@ -24,8 +24,8 @@ classifiers = [
 test = ["pytest>=8"]
 
 [project.urls]
-Homepage = "https://github.com/Ozaiy/openai-image-mcp"
-Issues = "https://github.com/Ozaiy/openai-image-mcp/issues"
+Homepage = "https://github.com/Ozaiy/openai-image-mcp-for-claude"
+Issues = "https://github.com/Ozaiy/openai-image-mcp-for-claude/issues"
 
 [project.scripts]
 openai-image-mcp = "openai_image_mcp.server:main"
