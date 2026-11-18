@@ -11,7 +11,7 @@ import jpeg from "jpeg-js";
 import OpenAI from "openai";
 import { PNG } from "pngjs";
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.1";
 export const TRANSPARENT_MODEL = "gpt-image-1.5"; // gpt-image-2 can't do transparent backgrounds
 const IMAGE_SUFFIXES = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const isWindows = process.platform === "win32";
@@ -260,6 +260,7 @@ export function makePreview(image: Buffer, format: Format): Preview | undefined 
 
 export const TOOL_DESCRIPTION = `Generate an image with OpenAI and save it to disk. Returns the saved file
 path and a small JPEG preview of the image (the saved file is full resolution).
+In your reply, always give the user the full path of the saved file.
 
 QUALITY - choose carefully, higher quality costs much more:
   - "low"    (default) drafts, previews, trying out ideas, placeholders.

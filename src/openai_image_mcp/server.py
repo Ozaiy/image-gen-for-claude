@@ -180,6 +180,7 @@ def generate_image(
 ) -> str | list[str | Image]:
     """Generate an image with OpenAI and save it to disk. Returns the saved file
     path and a small JPEG preview of the image (the saved file is full resolution).
+    In your reply, always give the user the full path of the saved file.
 
     QUALITY - choose carefully, higher quality costs much more:
       - "low"    (default) drafts, previews, trying out ideas, placeholders.

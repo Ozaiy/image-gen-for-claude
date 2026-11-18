@@ -1,8 +1,9 @@
 <!doctype html>
 <!--
-  MCP App view for generate_image: shows the generated image at full chat width.
-  Hosts that support MCP Apps (such as Claude Desktop and claude.ai) render this
-  inline in the conversation; other clients ignore it and show the tool result.
+  MCP App view for generate_image: shows just the generated image, at full chat
+  width. Hosts that support MCP Apps (such as Claude Desktop and claude.ai) render
+  this inline in the conversation; other clients ignore it and show the tool result.
+  The saved path isn't shown here: the model tells the user in its reply.
 
   It speaks the MCP Apps protocol (JSON-RPC over postMessage) directly, with no
   libraries and no network access. The image comes from the tool result itself.
@@ -14,55 +15,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Generated image</title>
 <style>
-  /* No color-scheme here: a scheme that differs from the host page makes the
-     browser paint an opaque backdrop behind the iframe instead of transparency. */
+  /* color-scheme follows the host's theme (set from JS). If it differs from the
+     host page, the browser paints an opaque white or black backdrop behind the view. */
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
   :root {
-    --muted: var(--color-text-secondary, #6b6b6b);
-    --danger: var(--color-text-danger, #b42318);
-    --frame: var(--color-background-secondary, rgba(127, 127, 127, 0.12));
-    --radius: var(--border-radius-lg, 12px);
+    --muted: var(--color-text-secondary, #8a8a8a);
+    --danger: var(--color-text-danger, #d92d20);
+    --placeholder: var(--color-background-secondary, rgba(127, 127, 127, 0.15));
   }
-  :root[data-theme="dark"] { --muted: var(--color-text-secondary, #a3a3a3); --danger: var(--color-text-danger, #f97066); }
-  html, body { margin: 0; background: transparent; }
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
   body {
     font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
     font-size: var(--font-text-sm-size, 13px);
     line-height: 1.4;
     color: var(--color-text-primary, inherit);
   }
-  figure { margin: 0; }
-  .frame {
-    position: relative;
-    width: 100%;
-    aspect-ratio: var(--ratio, 1 / 1);
-    border-radius: var(--radius);
-    background: var(--frame);
-    overflow: hidden;
+  #root { aspect-ratio: var(--ratio, 1 / 1); }
+  #root.text { aspect-ratio: auto; }
+  img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .zoomable { cursor: zoom-in; }
+  .fullscreen #root { aspect-ratio: auto; height: 100vh; }
+  .fullscreen .zoomable { cursor: zoom-out; }
+  .waiting {
+    position: relative; height: 100%;
+    display: grid; place-items: center;
+    background: var(--placeholder); color: var(--muted); overflow: hidden;
   }
-  .frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
-  .frame.zoomable { cursor: zoom-in; }
-  .fullscreen .frame { aspect-ratio: auto; height: calc(100vh - 3em); background: transparent; }
-  .fullscreen .frame.zoomable { cursor: zoom-out; }
-  .waiting { display: grid; place-items: center; text-align: center; color: var(--muted); padding: 1em; }
   .waiting::before {
     content: ""; position: absolute; inset: 0;
-    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.18) 50%, transparent 70%);
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.15) 50%, transparent 70%);
     background-size: 200% 100%;
     animation: shimmer 1.6s linear infinite;
   }
   @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
   @media (prefers-reduced-motion: reduce) { .waiting::before { animation: none; } }
-  figcaption {
-    display: flex; gap: 0.75em; justify-content: space-between; align-items: baseline;
-    padding: 0.5em 0.15em 0.1em; color: var(--muted);
-  }
-  .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); }
-  .meta { flex-shrink: 0; }
-  .error { color: var(--danger); white-space: pre-wrap; padding: 0.25em 0.15em; }
+  .message { padding: 0.25em 0; color: var(--muted); white-space: pre-wrap; }
+  .message.error { color: var(--danger); }
 </style>
 </head>
 <body>
-<figure id="root"></figure>
+<div id="root"></div>
 <script>
 (() => {
   "use strict";
@@ -108,7 +101,7 @@
     switch (msg.method) {
       case "ui/notifications/tool-input": showWaiting(msg.params && msg.params.arguments); break;
       case "ui/notifications/tool-result": showResult(msg.params || {}); break;
-      case "ui/notifications/tool-cancelled": showError("Cancelled."); break;
+      case "ui/notifications/tool-cancelled": showMessage("Cancelled.", true); break;
       case "ui/notifications/host-context-changed": applyContext(msg.params || {}); break;
     }
   });
@@ -128,22 +121,15 @@
 
   let lastHeight = 0;
   function reportSize() {
-    const height = Math.ceil(document.documentElement.getBoundingClientRect().height);
-    if (height !== lastHeight) {
+    const height = Math.ceil(root.getBoundingClientRect().height);
+    if (height && height !== lastHeight) {
       lastHeight = height;
       notify("ui/notifications/size-changed", { height });
     }
   }
-  new ResizeObserver(reportSize).observe(document.body);
+  new ResizeObserver(reportSize).observe(root);
 
   // ---------- rendering ----------
-
-  function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  }
 
   function setRatio(size) {
     const match = /^(\d+)x(\d+)$/.exec(size || "");
@@ -151,15 +137,20 @@
   }
 
   function showWaiting(args) {
-    args = args || {};
-    setRatio(args.size);
-    const frame = el("div", "frame waiting");
-    frame.append(el("span", "", "Generating image…"));
-    root.replaceChildren(frame);
+    setRatio((args || {}).size);
+    const box = document.createElement("div");
+    box.className = "waiting";
+    box.textContent = "Generating image…";
+    root.className = "";
+    root.replaceChildren(box);
   }
 
-  function showError(text) {
-    root.replaceChildren(el("div", "error", text));
+  function showMessage(text, isError) {
+    const box = document.createElement("div");
+    box.className = isError ? "message error" : "message";
+    box.textContent = text;
+    root.className = "text";
+    root.replaceChildren(box);
   }
 
   function showResult(result) {
@@ -167,50 +158,24 @@
     const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n");
     const image = blocks.find((b) => b.type === "image" && b.data);
 
-    if (result.isError || !image) {
-      if (result.isError || /^ERROR/.test(text)) return showError(text || "Image generation failed.");
-      // saved, but no preview (e.g. a large WebP): just show where it went
-    }
+    if (result.isError || /^ERROR/.test(text)) return showMessage(text || "Image generation failed.", true);
+    // saved, but no preview to show (e.g. a large WebP): the model reports the path
+    if (!image) return showMessage("Image saved. No preview available.", false);
 
-    const saved = /^Saved: (.+)$/m.exec(text);
-    const details = /^Model: (.+)$/m.exec(text);
-    const nodes = [];
-
-    if (image) {
-      const frame = el("div", "frame");
-      const img = el("img");
-      img.alt = "Generated image";
-      img.src = `data:${image.mimeType || "image/jpeg"};base64,${image.data}`;
-      img.addEventListener("load", () => {
-        if (img.naturalWidth && img.naturalHeight) root.style.setProperty("--ratio", `${img.naturalWidth} / ${img.naturalHeight}`);
-        reportSize();
-      });
-      if (displayModes.includes("fullscreen")) {
-        frame.classList.add("zoomable");
-        frame.title = "Click to enlarge";
-        frame.addEventListener("click", toggleFullscreen);
-      }
-      frame.append(img);
-      nodes.push(frame);
+    const img = document.createElement("img");
+    img.alt = "Generated image";
+    img.src = `data:${image.mimeType || "image/jpeg"};base64,${image.data}`;
+    img.addEventListener("load", () => {
+      if (img.naturalWidth && img.naturalHeight) root.style.setProperty("--ratio", `${img.naturalWidth} / ${img.naturalHeight}`);
+      reportSize();
+    });
+    if (displayModes.includes("fullscreen")) {
+      img.className = "zoomable";
+      img.title = "Click to enlarge";
+      img.addEventListener("click", toggleFullscreen);
     }
-
-    if (saved || details) {
-      const caption = el("figcaption");
-      if (saved) {
-        const path = el("span", "path", saved[1].trim());
-        path.title = saved[1].trim();
-        caption.append(path);
-      }
-      if (details) {
-        const size = /size: (\S+)/.exec(details[1]);
-        const quality = /quality: (\S+)/.exec(details[1]);
-        caption.append(el("span", "meta", [size && size[1].replace("x", "×"), quality && `${quality[1]} quality`].filter(Boolean).join(" · ")));
-      }
-      nodes.push(caption);
-    } else if (!image) {
-      nodes.push(el("div", "", text));
-    }
-    root.replaceChildren(...nodes);
+    root.className = "";
+    root.replaceChildren(img);
   }
 
   async function toggleFullscreen() {
