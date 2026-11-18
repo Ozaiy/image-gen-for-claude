@@ -1,6 +1,6 @@
 /**
  * Paths, API key loading and the generate_image tool. Same behavior as the Python
- * version in ../src/openai_image_mcp/server.py. Works on Windows, macOS and Linux.
+ * version in ../src/image_gen_for_claude/server.py. Works on Windows, macOS and Linux.
  */
 
 import { execFileSync } from "node:child_process";
@@ -12,7 +12,7 @@ import jpeg from "jpeg-js";
 import OpenAI from "openai";
 import { PNG } from "pngjs";
 
-export const VERSION = "0.5.2";
+export const VERSION = "0.6.0";
 export const TRANSPARENT_MODEL = "gpt-image-1.5"; // gpt-image-2 can't do transparent backgrounds
 const IMAGE_SUFFIXES = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const isWindows = process.platform === "win32";

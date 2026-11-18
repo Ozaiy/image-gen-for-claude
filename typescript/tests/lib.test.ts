@@ -380,7 +380,7 @@ test("Claude Code plugin matches the Claude Desktop extension", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8"));
   const plugin = JSON.parse(readFileSync(path.join(root, "..", "plugin", ".claude-plugin", "plugin.json"), "utf8"));
   assert.equal(plugin.version, lib.VERSION);
-  const server = plugin.mcpServers["openai-image"];
+  const server = plugin.mcpServers["image-gen"];
   assert.equal(server.command, "node");
   assert.deepEqual(server.args, ["${CLAUDE_PLUGIN_ROOT}/server/index.js"]);
   // Same settings, passed to the server the same way
@@ -425,7 +425,7 @@ test("built server lists the tool over stdio", async () => {
 
     // MCP Apps: the tool points at the image view, and the server serves it
     const uri = result.tools[0]._meta?.ui?.resourceUri;
-    assert.equal(uri, "ui://openai-image/view.html");
+    assert.equal(uri, "ui://image-gen/view.html");
     send({ jsonrpc: "2.0", id: 3, method: "resources/read", params: { uri } });
     const [view] = (await reply(3)).result.contents;
     assert.equal(view.mimeType, "text/html;profile=mcp-app");

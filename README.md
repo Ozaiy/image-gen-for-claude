@@ -1,6 +1,8 @@
-# openai-image-mcp-for-claude
+# image-gen-for-claude
 
 An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any MCP client) generate images with the OpenAI Images API (gpt-image) or the [FLUX API](https://docs.bfl.ai) from Black Forest Labs. Works on Windows, macOS and Linux.
+
+> **Renamed in 0.6.0** from `openai-image-mcp-for-claude`, since it does more than OpenAI now. The npm package is now `image-gen-for-claude`, the server and tool are called `image-gen`, and the Claude Code plugin is `image-gen@ozaiy`. Old links to the GitHub repository still work. To move over, remove the old setup (`claude mcp remove openai-image --scope user`, or the old extension in Claude Desktop) and install again with the commands below. Your API key files and `OPENAI_IMAGE_*` settings keep working unchanged.
 
 Images are saved to disk at full resolution, straight into the project the model is working on if it names a path. The model gets back the file path and a small JPEG preview (at most 1024px, quality 80), so it can see what it made without a multi-megabyte image filling up the conversation.
 
@@ -26,7 +28,7 @@ Some details:
 - **Transparent backgrounds** switch to `gpt-image-1.5`, because `gpt-image-2` doesn't support them. JPEG is changed to PNG, since JPEG can't be transparent.
 - **FLUX** is used when `model` starts with `flux-`. Supported are FLUX 3 Image (`flux-3-image`, `flux-3-image-klein`) and the FLUX.2 models (`flux-2-pro`, `flux-2-max`, `flux-2-flex`, `flux-2-klein-4b`, `flux-2-klein-9b`). Ask Claude for "a FLUX image" and it picks the model. FLUX ignores `quality` and can't make transparent backgrounds. The image is saved in the `output_format` you asked for, converted if FLUX sent another format. As a guide, a 1024×1024 image cost 4.8 credits ($0.05) with `flux-3-image` and 1.1 credits ($0.01) with `flux-3-image-klein` when tested; the tool reports the actual cost of each image. See [bfl.ai/pricing](https://bfl.ai/pricing).
 - **The preview** is a JPEG with its longest side at most 1024px, sent as `image/jpeg`. Transparent areas show as white in it; the saved file keeps its transparency. In the npx and Claude Desktop versions a WebP can't be shrunk, so it's sent unchanged (`image/webp`) when it's under 512 KB and left out when it's bigger.
-- **Showing the image in the chat** uses [MCP Apps](https://github.com/modelcontextprotocol/ext-apps): the tool comes with a small HTML view (`src/openai_image_mcp/view.html`) that the client draws inline, filled with the preview from the tool result. It loads nothing from the internet. Clients without MCP Apps support, such as Claude Code, ignore it and show the result as before.
+- **Showing the image in the chat** uses [MCP Apps](https://github.com/modelcontextprotocol/ext-apps): the tool comes with a small HTML view (`src/image_gen_for_claude/view.html`) that the client draws inline, filled with the preview from the tool result. It loads nothing from the internet. Clients without MCP Apps support, such as Claude Code, ignore it and show the result as before.
 - **If OpenAI or FLUX returns an error** (no credits, blocked by moderation, ...), the server passes the reason back to the model as text, so it can tell you what went wrong.
 
 ### Where images are saved
@@ -52,7 +54,7 @@ You also need an API key for at least one of the two services: an [OpenAI API ke
 
 ### Option 1: Claude Desktop extension
 
-1. Download `openai-image-mcp-for-claude-<version>.mcpb` from the [latest release](https://github.com/Ozaiy/openai-image-mcp-for-claude/releases/latest).
+1. Download `image-gen-for-claude-<version>.mcpb` from the [latest release](https://github.com/Ozaiy/image-gen-for-claude/releases/latest).
 2. Open Claude Desktop, go to **Settings**, search for "extensions" and open **Extensions**. Drag the `.mcpb` file onto that page. (On Windows, double-clicking the file doesn't install it.)
 3. Enter your OpenAI API key, your FLUX API key, or both, when asked. Claude Desktop stores it in your system keychain (Keychain on macOS, Credential Manager on Windows). You can also choose a save folder there; leave it empty for your Pictures folder.
 
@@ -65,14 +67,14 @@ Claude Code asks for your API keys in a form and stores them in your system keyc
 **Terminal:** in a Claude Code session, run
 
 ```text
-/plugin install openai-image --marketplace Ozaiy/openai-image-mcp-for-claude
+/plugin install image-gen --marketplace Ozaiy/image-gen-for-claude
 ```
 
-choose a scope (**Install for you** makes it available in every project), and fill in your OpenAI key, your FLUX key, or both. You can also choose a save folder; leave it empty for your Pictures folder. To change a key later, run `/plugin configure openai-image@ozaiy`.
+choose a scope (**Install for you** makes it available in every project), and fill in your OpenAI key, your FLUX key, or both. You can also choose a save folder; leave it empty for your Pictures folder. To change a key later, run `/plugin configure image-gen@ozaiy`.
 
-**VS Code:** type `/plugins` in the Claude Code panel. On the **Marketplaces** tab add `Ozaiy/openai-image-mcp-for-claude`, then install **Image Generation (OpenAI & FLUX)** on the **Plugins** tab. Claude Code shows the form for the keys after the install; the gear icon on the plugin's row opens it again.
+**VS Code:** type `/plugins` in the Claude Code panel. On the **Marketplaces** tab add `Ozaiy/image-gen-for-claude`, then install **Image Generation (OpenAI & FLUX)** on the **Plugins** tab. Claude Code shows the form for the keys after the install; the gear icon on the plugin's row opens it again.
 
-The tool is then called `mcp__plugin_openai-image_openai-image__generate_image`. If you set up the server with `claude mcp add` before, remove that one (`claude mcp remove openai-image --scope user`), or Claude sees two image tools.
+The tool is then called `mcp__plugin_image-gen_image-gen__generate_image`. If you set up the server with `claude mcp add` before, remove that one (`claude mcp remove image-gen --scope user`, or `claude mcp remove openai-image --scope user` for a setup from before 0.6.0), or Claude sees two image tools.
 
 Updates come from this repository's main branch. Run `/plugin`, open **Image Generation (OpenAI & FLUX)** on the **Installed** tab and choose **Update now**, or turn on auto-update for the `ozaiy` marketplace on the **Marketplaces** tab.
 
@@ -83,13 +85,13 @@ Save your API key first (see [API key](#api-key-for-options-3-and-4)).
 **Claude Code** on macOS and Linux:
 
 ```sh
-claude mcp add openai-image --scope user -- npx -y openai-image-mcp-for-claude
+claude mcp add image-gen --scope user -- npx -y image-gen-for-claude
 ```
 
 **Claude Code** on Windows (`npx` needs to be started through `cmd`):
 
 ```sh
-claude mcp add openai-image --scope user -- cmd /c npx -y openai-image-mcp-for-claude
+claude mcp add image-gen --scope user -- cmd /c npx -y image-gen-for-claude
 ```
 
 **Other clients** with an `mcpServers` JSON config:
@@ -97,9 +99,9 @@ claude mcp add openai-image --scope user -- cmd /c npx -y openai-image-mcp-for-c
 ```json
 {
   "mcpServers": {
-    "openai-image": {
+    "image-gen": {
       "command": "npx",
-      "args": ["-y", "openai-image-mcp-for-claude"]
+      "args": ["-y", "image-gen-for-claude"]
     }
   }
 }
@@ -117,7 +119,7 @@ Save your API key first (see [API key](#api-key-for-options-3-and-4)). Install u
 **Claude Code** (all platforms):
 
 ```sh
-claude mcp add openai-image --scope user -- uvx --from git+https://github.com/Ozaiy/openai-image-mcp-for-claude openai-image-mcp
+claude mcp add image-gen --scope user -- uvx --from git+https://github.com/Ozaiy/image-gen-for-claude image-gen-for-claude
 ```
 
 **Other clients** with an `mcpServers` JSON config:
@@ -125,9 +127,9 @@ claude mcp add openai-image --scope user -- uvx --from git+https://github.com/Oz
 ```json
 {
   "mcpServers": {
-    "openai-image": {
+    "image-gen": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/Ozaiy/openai-image-mcp-for-claude", "openai-image-mcp"]
+      "args": ["--from", "git+https://github.com/Ozaiy/image-gen-for-claude", "image-gen-for-claude"]
     }
   }
 }
@@ -137,16 +139,16 @@ claude mcp add openai-image --scope user -- uvx --from git+https://github.com/Oz
 
 ```sh
 # macOS / Linux
-python3 -m venv ~/.venvs/openai-image-mcp
-~/.venvs/openai-image-mcp/bin/pip install git+https://github.com/Ozaiy/openai-image-mcp-for-claude
-# command: /Users/me/.venvs/openai-image-mcp/bin/openai-image-mcp
+python3 -m venv ~/.venvs/image-gen-for-claude
+~/.venvs/image-gen-for-claude/bin/pip install git+https://github.com/Ozaiy/image-gen-for-claude
+# command: /Users/me/.venvs/image-gen-for-claude/bin/image-gen-for-claude
 ```
 
 ```powershell
 # Windows
-py -m venv $HOME\.venvs\openai-image-mcp
-& $HOME\.venvs\openai-image-mcp\Scripts\pip install git+https://github.com/Ozaiy/openai-image-mcp-for-claude
-# command: C:\Users\me\.venvs\openai-image-mcp\Scripts\openai-image-mcp.exe
+py -m venv $HOME\.venvs\image-gen-for-claude
+& $HOME\.venvs\image-gen-for-claude\Scripts\pip install git+https://github.com/Ozaiy/image-gen-for-claude
+# command: C:\Users\me\.venvs\image-gen-for-claude\Scripts\image-gen-for-claude.exe
 ```
 
 Use that full path as the `command` in your client config.
@@ -213,18 +215,18 @@ Ask Claude something like *"Generate a low-quality draft of a logo for a coffee 
 | `OPENAI_IMAGE_OUTPUT_DIR` | folder for images saved without a full `output_path` | your Pictures folder |
 | `OPENAI_IMAGE_MODEL` | default model, OpenAI or FLUX (e.g. `flux-3-image`) | `gpt-image-2`, or `flux-3-image` if only a FLUX key is set up |
 
-In Claude Code you can set these with `-e`, for example `claude mcp add openai-image -e OPENAI_IMAGE_OUTPUT_DIR=~/Images -- npx -y openai-image-mcp-for-claude`. The Claude Desktop extension sets the two keys and the save folder from its settings screen.
+In Claude Code you can set these with `-e`, for example `claude mcp add image-gen -e OPENAI_IMAGE_OUTPUT_DIR=~/Images -- npx -y image-gen-for-claude`. The Claude Desktop extension sets the two keys and the save folder from its settings screen.
 
 ## Development
 
 There are two implementations with the same behavior and the same tests:
 
-- **Python** in [`src/openai_image_mcp/server.py`](src/openai_image_mcp/server.py), used by option 4.
+- **Python** in [`src/image_gen_for_claude/server.py`](src/image_gen_for_claude/server.py), used by option 4.
 - **TypeScript** in [`typescript/src/`](typescript/src), used by options 1, 2 and 3. `npm run build` bundles it and its dependencies into the single file `typescript/dist/index.js`, which the npm package and the `.mcpb` contain. The build also copies it to `plugin/server/index.js` for the Claude Code plugin; that copy is committed, because Claude Code installs the plugin straight from this repository, so commit `plugin/` after a build. CI fails if the committed copy is out of date.
 
 ```sh
-git clone https://github.com/Ozaiy/openai-image-mcp-for-claude
-cd openai-image-mcp-for-claude
+git clone https://github.com/Ozaiy/image-gen-for-claude
+cd image-gen-for-claude
 
 # Python
 python3 -m venv .venv
@@ -236,12 +238,12 @@ cd typescript
 npm ci
 npm run build
 npm test
-npm run pack:mcpb                      # builds build/openai-image-mcp-for-claude-<version>.mcpb
+npm run pack:mcpb                      # builds build/image-gen-for-claude-<version>.mcpb
 ```
 
 The tests run on Windows, macOS and Linux with GitHub Actions on every push.
 
-**Releasing:** set the same version in `pyproject.toml`, `src/openai_image_mcp/__init__.py`, `typescript/package.json`, `typescript/manifest.json`, `typescript/src/lib.ts` and `plugin/.claude-plugin/plugin.json`, run `npm run build` in `typescript/` and commit, then push a tag such as `v0.3.0`. The release workflow builds the `.mcpb`, attaches it to a GitHub release, and publishes the npm package if the repository has an `NPM_TOKEN` secret. The Claude Code plugin is updated by the push to main itself.
+**Releasing:** set the same version in `pyproject.toml`, `src/image_gen_for_claude/__init__.py`, `typescript/package.json`, `typescript/manifest.json`, `typescript/src/lib.ts` and `plugin/.claude-plugin/plugin.json`, run `npm run build` in `typescript/` and commit, then push a tag such as `v0.3.0`. The release workflow builds the `.mcpb`, attaches it to a GitHub release, and publishes the npm package if the repository has an `NPM_TOKEN` secret. The Claude Code plugin is updated by the push to main itself.
 
 ## License
 

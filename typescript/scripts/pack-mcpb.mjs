@@ -1,4 +1,4 @@
-// Builds openai-image-mcp-for-claude-<version>.mcpb, the Claude Desktop extension.
+// Builds image-gen-for-claude-<version>.mcpb, the Claude Desktop extension.
 // dist/index.js is a single bundled file with every dependency inside, so the
 // extension needs no node_modules. Run with: npm run pack:mcpb
 

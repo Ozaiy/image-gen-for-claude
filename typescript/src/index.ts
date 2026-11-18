@@ -5,14 +5,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { generateImage, TOOL_DESCRIPTION, VERSION } from "./lib.js";
 // The same view the Python server uses; esbuild bundles it as a string
-import VIEW_HTML from "../../src/openai_image_mcp/view.html";
+import VIEW_HTML from "../../src/image_gen_for_claude/view.html";
 
 // MCP Apps: hosts that support it (Claude Desktop, claude.ai) show the image large,
 // inline in the chat, using this HTML view. Other clients ignore it.
-const VIEW_URI = "ui://openai-image/view.html";
+const VIEW_URI = "ui://image-gen/view.html";
 const VIEW_MIME_TYPE = "text/html;profile=mcp-app";
 
-const server = new McpServer({ name: "openai-image", version: VERSION });
+const server = new McpServer({ name: "image-gen", version: VERSION });
 
 server.registerResource(
   "image_view",

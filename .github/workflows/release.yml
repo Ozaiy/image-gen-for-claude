@@ -5,7 +5,7 @@
 # the main branch, and its "version" in plugin.json tells users an update is there.
 # Keep the version the same in typescript/package.json, typescript/manifest.json,
 # typescript/src/lib.ts, plugin/.claude-plugin/plugin.json, pyproject.toml and
-# src/openai_image_mcp/__init__.py.
+# src/image_gen_for_claude/__init__.py.
 
 name: Release
 

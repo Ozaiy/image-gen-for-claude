@@ -52,10 +52,10 @@ PROVIDER_NAME = {"openai": "OpenAI", "bfl": "Black Forest Labs (FLUX)"}
 
 # MCP Apps: hosts that support it (Claude Desktop, claude.ai) show the image large,
 # inline in the chat, using this HTML view. Other clients ignore it.
-VIEW_URI = "ui://openai-image/view.html"
+VIEW_URI = "ui://image-gen/view.html"
 VIEW_MIME_TYPE = "text/html;profile=mcp-app"
 
-mcp = MCPServer("openai-image")
+mcp = MCPServer("image-gen")
 _client = None
 # httpx logs every request, including FLUX's signed download URLs; keep only problems
 logging.getLogger("httpx").setLevel(logging.WARNING)

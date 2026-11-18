@@ -1,7 +1,7 @@
 [project]
-name = "openai-image-mcp"
-version = "0.5.2"
-description = "MCP server that generates images with the OpenAI Images API and saves them to disk"
+name = "image-gen-for-claude"
+version = "0.6.0"
+description = "MCP server that generates images with OpenAI (gpt-image) or FLUX (Black Forest Labs) and saves them to disk"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -26,11 +26,13 @@ classifiers = [
 test = ["pytest>=8"]
 
 [project.urls]
-Homepage = "https://github.com/Ozaiy/openai-image-mcp-for-claude"
-Issues = "https://github.com/Ozaiy/openai-image-mcp-for-claude/issues"
+Homepage = "https://github.com/Ozaiy/image-gen-for-claude"
+Issues = "https://github.com/Ozaiy/image-gen-for-claude/issues"
 
 [project.scripts]
-openai-image-mcp = "openai_image_mcp.server:main"
+image-gen-for-claude = "image_gen_for_claude.server:main"
+# The name before 0.6.0, so existing `uvx --from git+... openai-image-mcp` configs keep working
+openai-image-mcp = "image_gen_for_claude.server:main"
 
 [build-system]
 requires = ["hatchling>=1.27"]

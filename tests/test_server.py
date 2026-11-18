@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image as PILImage
 
-from openai_image_mcp import server
+from image_gen_for_claude import server
 
 
 @pytest.fixture
@@ -216,7 +216,7 @@ def test_server_lists_tool_over_stdio():
     # Like a real client: keep stdin open and wait for each reply. Closing stdin early
     # makes the server shut down, sometimes before it answers (seen on macOS).
     proc = subprocess.Popen(
-        [sys.executable, "-m", "openai_image_mcp.server"],
+        [sys.executable, "-m", "image_gen_for_claude.server"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     lines = queue.Queue()

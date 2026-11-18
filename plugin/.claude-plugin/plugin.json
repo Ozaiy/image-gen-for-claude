@@ -1,18 +1,18 @@
 {
-  "name": "openai-image",
+  "name": "image-gen",
   "displayName": "Image Generation (OpenAI & FLUX)",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Generate images with OpenAI (gpt-image) or FLUX (Black Forest Labs) and save them straight to disk.",
   "author": {
     "name": "Ozcan Isik",
     "url": "https://github.com/Ozaiy"
   },
-  "homepage": "https://github.com/Ozaiy/openai-image-mcp-for-claude",
-  "repository": "https://github.com/Ozaiy/openai-image-mcp-for-claude",
+  "homepage": "https://github.com/Ozaiy/image-gen-for-claude",
+  "repository": "https://github.com/Ozaiy/image-gen-for-claude",
   "license": "MIT",
   "keywords": ["openai", "flux", "image", "image-generation", "gpt-image"],
   "mcpServers": {
-    "openai-image": {
+    "image-gen": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/server/index.js"],
       "env": {
