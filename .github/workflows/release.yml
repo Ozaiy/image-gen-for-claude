@@ -1,8 +1,11 @@
 # Push a tag like v0.3.0 to make a release:
 #   - builds the Claude Desktop extension (.mcpb) and attaches it to a GitHub release
 #   - publishes the npm package, if the repo has an NPM_TOKEN secret
+# The Claude Code plugin (plugin/) needs no release step: Claude Code installs it from
+# the main branch, and its "version" in plugin.json tells users an update is there.
 # Keep the version the same in typescript/package.json, typescript/manifest.json,
-# typescript/src/lib.ts, pyproject.toml and src/openai_image_mcp/__init__.py.
+# typescript/src/lib.ts, plugin/.claude-plugin/plugin.json, pyproject.toml and
+# src/openai_image_mcp/__init__.py.
 
 name: Release
 
@@ -31,6 +34,8 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME but package.json says $version"; exit 1; }
+          plugin=$(node -p "require('../plugin/.claude-plugin/plugin.json').version")
+          test "$plugin" = "$version" || { echo "plugin.json says $plugin but package.json says $version"; exit 1; }
       - run: npm run build
       - run: npm test
       - run: npm run pack:mcpb

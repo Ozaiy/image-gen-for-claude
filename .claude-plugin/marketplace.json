@@ -1,0 +1,15 @@
+{
+  "name": "ozaiy",
+  "owner": {
+    "name": "Ozcan Isik",
+    "url": "https://github.com/Ozaiy"
+  },
+  "description": "Image generation for Claude Code with OpenAI (gpt-image) or FLUX (Black Forest Labs).",
+  "plugins": [
+    {
+      "name": "openai-image",
+      "source": "./plugin",
+      "description": "Generate images with OpenAI (gpt-image) or FLUX (Black Forest Labs) and save them straight to disk. Asks for your API keys when you install it and keeps them in your system keychain."
+    }
+  ]
+}

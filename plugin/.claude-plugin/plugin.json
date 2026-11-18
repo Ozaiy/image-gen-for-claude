@@ -1,0 +1,44 @@
+{
+  "name": "openai-image",
+  "displayName": "Image Generation (OpenAI & FLUX)",
+  "version": "0.5.2",
+  "description": "Generate images with OpenAI (gpt-image) or FLUX (Black Forest Labs) and save them straight to disk.",
+  "author": {
+    "name": "Ozcan Isik",
+    "url": "https://github.com/Ozaiy"
+  },
+  "homepage": "https://github.com/Ozaiy/openai-image-mcp-for-claude",
+  "repository": "https://github.com/Ozaiy/openai-image-mcp-for-claude",
+  "license": "MIT",
+  "keywords": ["openai", "flux", "image", "image-generation", "gpt-image"],
+  "mcpServers": {
+    "openai-image": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/server/index.js"],
+      "env": {
+        "OPENAI_API_KEY": "${user_config.openai_api_key}",
+        "BFL_API_KEY": "${user_config.bfl_api_key}",
+        "OPENAI_IMAGE_OUTPUT_DIR": "${user_config.output_dir}"
+      }
+    }
+  },
+  "userConfig": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API key",
+      "description": "Your key from platform.openai.com/api-keys, for gpt-image models. Leave empty if you only use FLUX. Billed by OpenAI.",
+      "sensitive": true
+    },
+    "bfl_api_key": {
+      "type": "string",
+      "title": "FLUX API key (Black Forest Labs)",
+      "description": "Your key from dashboard.bfl.ai, for FLUX models. Leave empty if you only use OpenAI. Billed by Black Forest Labs.",
+      "sensitive": true
+    },
+    "output_dir": {
+      "type": "directory",
+      "title": "Save folder",
+      "description": "Where images are saved when Claude doesn't name a full path. Leave empty for your Pictures folder."
+    }
+  }
+}

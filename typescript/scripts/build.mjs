@@ -3,7 +3,7 @@
 // Also writes dist/THIRD_PARTY_LICENSES.txt for the bundled packages, as their licenses require.
 
 import { build } from "esbuild";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +20,19 @@ const result = await build({
   minifyWhitespace: true,
   legalComments: "none", // the full license texts go in THIRD_PARTY_LICENSES.txt
   metafile: true,
-  loader: { ".html": "text" }, // the MCP Apps view, shared with the Python version
+  // The MCP Apps view, shared with the Python version. Loaded as text with LF line endings,
+  // so a Windows checkout (CRLF) builds the same bundle as the committed plugin/server/index.js.
+  plugins: [
+    {
+      name: "html-text-lf",
+      setup(b) {
+        b.onLoad({ filter: /\.html$/ }, (args) => ({
+          contents: readFileSync(args.path, "utf8").replace(/\r\n/g, "\n"),
+          loader: "text",
+        }));
+      },
+    },
+  ],
   banner: {
     js: "#!/usr/bin/env node\nimport { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
   },
@@ -49,3 +61,13 @@ writeFileSync(
 );
 console.log(`dist/index.js: ${(result.metafile.outputs["dist/index.js"]?.bytes ?? 0) / 1000 | 0} kB, ${packages.size} bundled packages`);
 for (const [, pkg] of packages) console.log(`  ${pkg.name}@${pkg.version} ${pkg.license}`);
+
+// The Claude Code plugin (../plugin) runs this same bundle. It's committed, because Claude Code
+// installs the plugin straight from the git repo; CI checks the committed copy is up to date.
+const pluginDir = path.join(root, "..", "plugin");
+mkdirSync(path.join(pluginDir, "server"), { recursive: true });
+for (const file of ["index.js", "THIRD_PARTY_LICENSES.txt"]) {
+  copyFileSync(path.join(root, "dist", file), path.join(pluginDir, "server", file));
+}
+copyFileSync(path.join(root, "..", "LICENSE"), path.join(pluginDir, "LICENSE"));
+console.log("Copied the bundle to plugin/server/");

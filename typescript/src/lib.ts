@@ -12,7 +12,7 @@ import jpeg from "jpeg-js";
 import OpenAI from "openai";
 import { PNG } from "pngjs";
 
-export const VERSION = "0.5.1";
+export const VERSION = "0.5.2";
 export const TRANSPARENT_MODEL = "gpt-image-1.5"; // gpt-image-2 can't do transparent backgrounds
 const IMAGE_SUFFIXES = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const isWindows = process.platform === "win32";

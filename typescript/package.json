@@ -1,6 +1,6 @@
 {
   "name": "openai-image-mcp-for-claude",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "MCP server that lets Claude generate images with the OpenAI Images API and save them to disk",
   "license": "MIT",
   "author": "Ozcan Isik",

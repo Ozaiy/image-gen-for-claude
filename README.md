@@ -39,13 +39,14 @@ Some details:
 
 ## Install
 
-Pick one. All three give you the same tool and behave the same way.
+Pick one. All four give you the same tool and behave the same way.
 
 | Option | You need to install first | Best for |
 |---|---|---|
 | [1. Claude Desktop extension](#option-1-claude-desktop-extension) | nothing | Claude Desktop |
-| [2. npx](#option-2-npx-nodejs) | [Node.js](https://nodejs.org) 20 or newer | Claude Code and other MCP clients |
-| [3. uvx](#option-3-uvx-python) | [uv](https://docs.astral.sh/uv/getting-started/installation/) | people who prefer Python |
+| [2. Claude Code plugin](#option-2-claude-code-plugin) | [Node.js](https://nodejs.org) 20 or newer | Claude Code (terminal and VS Code) |
+| [3. npx](#option-3-npx-nodejs) | [Node.js](https://nodejs.org) 20 or newer | other MCP clients |
+| [4. uvx](#option-4-uvx-python) | [uv](https://docs.astral.sh/uv/getting-started/installation/) | people who prefer Python |
 
 You also need an API key for at least one of the two services: an [OpenAI API key](https://platform.openai.com/api-keys) with access to the image models, or a [FLUX API key](https://dashboard.bfl.ai) from Black Forest Labs. Both bill per image.
 
@@ -57,9 +58,27 @@ You also need an API key for at least one of the two services: an [OpenAI API ke
 
 It runs on the Node.js that ships with Claude Desktop, so there's nothing else to install, and you don't need the API key file described below.
 
-### Option 2: npx (Node.js)
+### Option 2: Claude Code plugin
 
-Save your API key first (see [API key](#api-key-for-options-2-and-3)).
+Claude Code asks for your API keys in a form and stores them in your system keychain, so you don't need the API key file described below. Works in the terminal and in the VS Code extension, on Windows, macOS and Linux. Needs [Node.js](https://nodejs.org) 20 or newer on your `PATH`.
+
+**Terminal:** in a Claude Code session, run
+
+```text
+/plugin install openai-image --marketplace Ozaiy/openai-image-mcp-for-claude
+```
+
+choose a scope (**Install for you** makes it available in every project), and fill in your OpenAI key, your FLUX key, or both. You can also choose a save folder; leave it empty for your Pictures folder. To change a key later, run `/plugin configure openai-image@ozaiy`.
+
+**VS Code:** type `/plugins` in the Claude Code panel. On the **Marketplaces** tab add `Ozaiy/openai-image-mcp-for-claude`, then install **Image Generation (OpenAI & FLUX)** on the **Plugins** tab. Claude Code shows the form for the keys after the install; the gear icon on the plugin's row opens it again.
+
+The tool is then called `mcp__plugin_openai-image_openai-image__generate_image`. If you set up the server with `claude mcp add` before, remove that one (`claude mcp remove openai-image --scope user`), or Claude sees two image tools.
+
+Updates come from this repository's main branch. Run `/plugin`, open **Image Generation (OpenAI & FLUX)** on the **Installed** tab and choose **Update now**, or turn on auto-update for the `ozaiy` marketplace on the **Marketplaces** tab.
+
+### Option 3: npx (Node.js)
+
+Save your API key first (see [API key](#api-key-for-options-3-and-4)).
 
 **Claude Code** on macOS and Linux:
 
@@ -88,9 +107,9 @@ claude mcp add openai-image --scope user -- cmd /c npx -y openai-image-mcp-for-c
 
 The package has no dependencies (everything is bundled into one file), so `npx` starts it quickly.
 
-### Option 3: uvx (Python)
+### Option 4: uvx (Python)
 
-Save your API key first (see [API key](#api-key-for-options-2-and-3)). Install uv if you don't have it:
+Save your API key first (see [API key](#api-key-for-options-3-and-4)). Install uv if you don't have it:
 
 - **macOS / Linux:** `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **Windows:** `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
@@ -138,7 +157,7 @@ Desktop apps often don't see the folder Node.js or uv was installed in, especial
 
 Restart your client after changing its config.
 
-### API key (for options 2 and 3)
+### API key (for options 3 and 4)
 
 The server uses the `OPENAI_API_KEY` environment variable if it's set. Otherwise it reads the key from a file named `api_key`, in the first of these places that exists:
 
@@ -200,8 +219,8 @@ In Claude Code you can set these with `-e`, for example `claude mcp add openai-i
 
 There are two implementations with the same behavior and the same tests:
 
-- **Python** in [`src/openai_image_mcp/server.py`](src/openai_image_mcp/server.py), used by option 3.
-- **TypeScript** in [`typescript/src/`](typescript/src), used by options 1 and 2. `npm run build` bundles it and its dependencies into the single file `typescript/dist/index.js`, which both the npm package and the `.mcpb` contain.
+- **Python** in [`src/openai_image_mcp/server.py`](src/openai_image_mcp/server.py), used by option 4.
+- **TypeScript** in [`typescript/src/`](typescript/src), used by options 1, 2 and 3. `npm run build` bundles it and its dependencies into the single file `typescript/dist/index.js`, which the npm package and the `.mcpb` contain. The build also copies it to `plugin/server/index.js` for the Claude Code plugin; that copy is committed, because Claude Code installs the plugin straight from this repository, so commit `plugin/` after a build. CI fails if the committed copy is out of date.
 
 ```sh
 git clone https://github.com/Ozaiy/openai-image-mcp-for-claude
@@ -222,7 +241,7 @@ npm run pack:mcpb                      # builds build/openai-image-mcp-for-claud
 
 The tests run on Windows, macOS and Linux with GitHub Actions on every push.
 
-**Releasing:** set the same version in `pyproject.toml`, `src/openai_image_mcp/__init__.py`, `typescript/package.json`, `typescript/manifest.json` and `typescript/src/lib.ts`, then push a tag such as `v0.3.0`. The release workflow builds the `.mcpb`, attaches it to a GitHub release, and publishes the npm package if the repository has an `NPM_TOKEN` secret.
+**Releasing:** set the same version in `pyproject.toml`, `src/openai_image_mcp/__init__.py`, `typescript/package.json`, `typescript/manifest.json`, `typescript/src/lib.ts` and `plugin/.claude-plugin/plugin.json`, run `npm run build` in `typescript/` and commit, then push a tag such as `v0.3.0`. The release workflow builds the `.mcpb`, attaches it to a GitHub release, and publishes the npm package if the repository has an `NPM_TOKEN` secret. The Claude Code plugin is updated by the push to main itself.
 
 ## License
 

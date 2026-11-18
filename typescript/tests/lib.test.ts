@@ -376,6 +376,22 @@ test("version matches package.json and manifest.json", () => {
   assert.equal(lib.VERSION, manifest.version);
 });
 
+test("Claude Code plugin matches the Claude Desktop extension", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8"));
+  const plugin = JSON.parse(readFileSync(path.join(root, "..", "plugin", ".claude-plugin", "plugin.json"), "utf8"));
+  assert.equal(plugin.version, lib.VERSION);
+  const server = plugin.mcpServers["openai-image"];
+  assert.equal(server.command, "node");
+  assert.deepEqual(server.args, ["${CLAUDE_PLUGIN_ROOT}/server/index.js"]);
+  // Same settings, passed to the server the same way
+  assert.deepEqual(server.env, manifest.server.mcp_config.env);
+  assert.deepEqual(Object.keys(plugin.userConfig), Object.keys(manifest.user_config));
+  for (const [key, option] of Object.entries(plugin.userConfig) as [string, { type: string; sensitive?: boolean }][]) {
+    assert.equal(option.type, manifest.user_config[key].type, key);
+    assert.equal(option.sensitive ?? false, manifest.user_config[key].sensitive ?? false, key);
+  }
+});
+
 // ---------- the built server starts and speaks MCP ----------
 
 test("built server lists the tool over stdio", async () => {

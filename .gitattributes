@@ -1,0 +1,3 @@
+# The plugin's bundled server is a build output that CI compares byte for byte,
+# so keep it exactly as built (no CRLF conversion on Windows checkouts).
+plugin/server/* -text

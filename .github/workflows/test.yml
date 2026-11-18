@@ -37,5 +37,10 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: npm ci
       - run: npm run build
+      - name: Check the Claude Code plugin's bundled server is up to date
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          git status --porcelain -- ../plugin
+          test -z "$(git status --porcelain -- ../plugin)" || { echo "plugin/ differs from a fresh build: run 'npm run build' in typescript/ and commit plugin/"; exit 1; }
       - run: npm test
       - run: npm run pack:mcpb
