@@ -1,0 +1,29 @@
+[project]
+name = "openai-image-mcp"
+version = "0.1.0"
+description = "MCP server that generates images with the OpenAI Images API and saves them to disk"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ozcan Isik" }]
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=2.3,<3",
+    "openai>=3,<4",
+]
+keywords = ["mcp", "openai", "image-generation", "claude", "gpt-image"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/Ozaiy/openai-image-mcp"
+Issues = "https://github.com/Ozaiy/openai-image-mcp/issues"
+
+[project.scripts]
+openai-image-mcp = "openai_image_mcp.server:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
