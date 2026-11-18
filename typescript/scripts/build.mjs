@@ -20,6 +20,7 @@ const result = await build({
   minifyWhitespace: true,
   legalComments: "none", // the full license texts go in THIRD_PARTY_LICENSES.txt
   metafile: true,
+  loader: { ".html": "text" }, // the MCP Apps view, shared with the Python version
   banner: {
     js: "#!/usr/bin/env node\nimport { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
   },

@@ -248,3 +248,14 @@ def test_server_lists_tool_over_stdio():
             proc.kill()
         proc.stdout.close()
         proc.stderr.close()
+
+
+def test_tool_points_at_the_image_view():
+    # MCP Apps: hosts that support it render this view inline with the image
+    import asyncio
+
+    tool = asyncio.run(server.mcp.list_tools())[0]
+    assert tool.meta["ui"]["resourceUri"] == server.VIEW_URI
+    [view] = asyncio.run(server.mcp.read_resource(server.VIEW_URI))
+    assert view.mime_type == "text/html;profile=mcp-app"
+    assert "ui/notifications/tool-result" in view.content

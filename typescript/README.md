@@ -2,7 +2,7 @@
 
 An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any MCP client) generate images with the OpenAI Images API. Works on Windows, macOS and Linux.
 
-Images are saved to disk at full resolution. The model gets back the file path and a small JPEG preview (at most 1024px, quality 80), so it can see what it made without a multi-megabyte image filling up the conversation.
+Images are saved to disk at full resolution. The model gets back the file path and a small JPEG preview (at most 1024px, quality 80), so it can see what it made without a multi-megabyte image filling up the conversation. In Claude Desktop and claude.ai the image is also shown large, right in the chat (using MCP Apps).
 
 **Full documentation:** https://github.com/Ozaiy/openai-image-mcp-for-claude
 

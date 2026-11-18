@@ -4,6 +4,8 @@ An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any MCP cl
 
 Images are saved to disk at full resolution, straight into the project the model is working on if it names a path. The model gets back the file path and a small JPEG preview (at most 1024px, quality 80), so it can see what it made without a multi-megabyte image filling up the conversation.
 
+In Claude Desktop and claude.ai the image is also shown large, right in the chat, with the saved path underneath. Click it to view it full screen.
+
 ## What it does
 
 The server gives you one tool, `generate_image`:
@@ -23,6 +25,7 @@ Some details:
 - **Quality defaults to `low`** because higher quality costs a lot more. The tool description tells the model to use `high` only for final images you asked for.
 - **Transparent backgrounds** switch to `gpt-image-1.5`, because `gpt-image-2` doesn't support them. JPEG is changed to PNG, since JPEG can't be transparent.
 - **The preview** is a JPEG with its longest side at most 1024px, sent as `image/jpeg`. Transparent areas show as white in it; the saved file keeps its transparency. In the npx and Claude Desktop versions a WebP can't be shrunk, so it's sent unchanged (`image/webp`) when it's under 512 KB and left out when it's bigger.
+- **Showing the image in the chat** uses [MCP Apps](https://github.com/modelcontextprotocol/ext-apps): the tool comes with a small HTML view (`src/openai_image_mcp/view.html`) that the client draws inline, filled with the preview from the tool result. It loads nothing from the internet. Clients without MCP Apps support, such as Claude Code, ignore it and show the result as before.
 - **If OpenAI returns an error**, the server passes the reason back to the model as text, so it can tell you what went wrong.
 
 ### Where images are saved

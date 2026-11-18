@@ -1,0 +1,243 @@
+<!doctype html>
+<!--
+  MCP App view for generate_image: shows the generated image at full chat width.
+  Hosts that support MCP Apps (such as Claude Desktop and claude.ai) render this
+  inline in the conversation; other clients ignore it and show the tool result.
+
+  It speaks the MCP Apps protocol (JSON-RPC over postMessage) directly, with no
+  libraries and no network access. The image comes from the tool result itself.
+  Used by both the Python server and the TypeScript build.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generated image</title>
+<style>
+  /* No color-scheme here: a scheme that differs from the host page makes the
+     browser paint an opaque backdrop behind the iframe instead of transparency. */
+  :root {
+    --muted: var(--color-text-secondary, #6b6b6b);
+    --danger: var(--color-text-danger, #b42318);
+    --frame: var(--color-background-secondary, rgba(127, 127, 127, 0.12));
+    --radius: var(--border-radius-lg, 12px);
+  }
+  :root[data-theme="dark"] { --muted: var(--color-text-secondary, #a3a3a3); --danger: var(--color-text-danger, #f97066); }
+  html, body { margin: 0; background: transparent; }
+  body {
+    font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
+    font-size: var(--font-text-sm-size, 13px);
+    line-height: 1.4;
+    color: var(--color-text-primary, inherit);
+  }
+  figure { margin: 0; }
+  .frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: var(--ratio, 1 / 1);
+    border-radius: var(--radius);
+    background: var(--frame);
+    overflow: hidden;
+  }
+  .frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .frame.zoomable { cursor: zoom-in; }
+  .fullscreen .frame { aspect-ratio: auto; height: calc(100vh - 3em); background: transparent; }
+  .fullscreen .frame.zoomable { cursor: zoom-out; }
+  .waiting { display: grid; place-items: center; text-align: center; color: var(--muted); padding: 1em; }
+  .waiting::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.18) 50%, transparent 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+  @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+  @media (prefers-reduced-motion: reduce) { .waiting::before { animation: none; } }
+  figcaption {
+    display: flex; gap: 0.75em; justify-content: space-between; align-items: baseline;
+    padding: 0.5em 0.15em 0.1em; color: var(--muted);
+  }
+  .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); }
+  .meta { flex-shrink: 0; }
+  .error { color: var(--danger); white-space: pre-wrap; padding: 0.25em 0.15em; }
+</style>
+</head>
+<body>
+<figure id="root"></figure>
+<script>
+(() => {
+  "use strict";
+  const PROTOCOL_VERSION = "2026-01-26";
+  const root = document.getElementById("root");
+  let nextId = 1;
+  const pending = new Map();
+  let displayModes = [];
+  let displayMode = "inline";
+
+  // ---------- JSON-RPC over postMessage ----------
+
+  function post(message) {
+    window.parent.postMessage({ jsonrpc: "2.0", ...message }, "*");
+  }
+  function request(method, params) {
+    const id = nextId++;
+    post({ id, method, params });
+    return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+  }
+  function notify(method, params) {
+    post({ method, params: params || {} });
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+
+    if (msg.method === undefined && pending.has(msg.id)) {
+      // a reply to one of our requests
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      msg.error ? reject(msg.error) : resolve(msg.result);
+      return;
+    }
+    if (msg.id !== undefined && msg.method) {
+      // a request from the host: answer every one so the host never waits
+      if (msg.method === "ui/resource-teardown" || msg.method === "ping") post({ id: msg.id, result: {} });
+      else post({ id: msg.id, error: { code: -32601, message: "Method not found" } });
+      return;
+    }
+    switch (msg.method) {
+      case "ui/notifications/tool-input": showWaiting(msg.params && msg.params.arguments); break;
+      case "ui/notifications/tool-result": showResult(msg.params || {}); break;
+      case "ui/notifications/tool-cancelled": showError("Cancelled."); break;
+      case "ui/notifications/host-context-changed": applyContext(msg.params || {}); break;
+    }
+  });
+
+  // ---------- host theme and size ----------
+
+  function applyContext(ctx) {
+    if (ctx.theme) document.documentElement.dataset.theme = ctx.theme;
+    const vars = ctx.styles && ctx.styles.variables;
+    if (vars) for (const [name, value] of Object.entries(vars)) if (value) document.documentElement.style.setProperty(name, value);
+    if (ctx.availableDisplayModes) displayModes = ctx.availableDisplayModes;
+    if (ctx.displayMode) {
+      displayMode = ctx.displayMode;
+      document.body.classList.toggle("fullscreen", displayMode === "fullscreen");
+    }
+  }
+
+  let lastHeight = 0;
+  function reportSize() {
+    const height = Math.ceil(document.documentElement.getBoundingClientRect().height);
+    if (height !== lastHeight) {
+      lastHeight = height;
+      notify("ui/notifications/size-changed", { height });
+    }
+  }
+  new ResizeObserver(reportSize).observe(document.body);
+
+  // ---------- rendering ----------
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function setRatio(size) {
+    const match = /^(\d+)x(\d+)$/.exec(size || "");
+    if (match) root.style.setProperty("--ratio", `${match[1]} / ${match[2]}`);
+  }
+
+  function showWaiting(args) {
+    args = args || {};
+    setRatio(args.size);
+    const frame = el("div", "frame waiting");
+    frame.append(el("span", "", "Generating image…"));
+    root.replaceChildren(frame);
+  }
+
+  function showError(text) {
+    root.replaceChildren(el("div", "error", text));
+  }
+
+  function showResult(result) {
+    const blocks = Array.isArray(result.content) ? result.content : [];
+    const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n");
+    const image = blocks.find((b) => b.type === "image" && b.data);
+
+    if (result.isError || !image) {
+      if (result.isError || /^ERROR/.test(text)) return showError(text || "Image generation failed.");
+      // saved, but no preview (e.g. a large WebP): just show where it went
+    }
+
+    const saved = /^Saved: (.+)$/m.exec(text);
+    const details = /^Model: (.+)$/m.exec(text);
+    const nodes = [];
+
+    if (image) {
+      const frame = el("div", "frame");
+      const img = el("img");
+      img.alt = "Generated image";
+      img.src = `data:${image.mimeType || "image/jpeg"};base64,${image.data}`;
+      img.addEventListener("load", () => {
+        if (img.naturalWidth && img.naturalHeight) root.style.setProperty("--ratio", `${img.naturalWidth} / ${img.naturalHeight}`);
+        reportSize();
+      });
+      if (displayModes.includes("fullscreen")) {
+        frame.classList.add("zoomable");
+        frame.title = "Click to enlarge";
+        frame.addEventListener("click", toggleFullscreen);
+      }
+      frame.append(img);
+      nodes.push(frame);
+    }
+
+    if (saved || details) {
+      const caption = el("figcaption");
+      if (saved) {
+        const path = el("span", "path", saved[1].trim());
+        path.title = saved[1].trim();
+        caption.append(path);
+      }
+      if (details) {
+        const size = /size: (\S+)/.exec(details[1]);
+        const quality = /quality: (\S+)/.exec(details[1]);
+        caption.append(el("span", "meta", [size && size[1].replace("x", "×"), quality && `${quality[1]} quality`].filter(Boolean).join(" · ")));
+      }
+      nodes.push(caption);
+    } else if (!image) {
+      nodes.push(el("div", "", text));
+    }
+    root.replaceChildren(...nodes);
+  }
+
+  async function toggleFullscreen() {
+    const mode = displayMode === "fullscreen" ? "inline" : "fullscreen";
+    try {
+      const result = await request("ui/request-display-mode", { mode });
+      applyContext({ displayMode: (result && result.mode) || mode });
+    } catch (e) {
+      // host refused: stay as we are
+    }
+  }
+
+  // ---------- start ----------
+
+  showWaiting();
+  request("ui/initialize", {
+    appInfo: { name: "openai-image-view", version: "1" },
+    appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] },
+    protocolVersion: PROTOCOL_VERSION,
+  })
+    .then((result) => {
+      applyContext((result && result.hostContext) || {});
+      notify("ui/notifications/initialized");
+      reportSize();
+    })
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>

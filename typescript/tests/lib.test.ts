@@ -307,6 +307,14 @@ test("built server lists the tool over stdio", async () => {
     assert.deepEqual(result.tools.map((t: { name: string }) => t.name), ["generate_image"]);
     const props = Object.keys(result.tools[0].inputSchema.properties);
     assert.deepEqual(props, ["prompt", "quality", "size", "background", "output_format", "output_path", "model"]);
+
+    // MCP Apps: the tool points at the image view, and the server serves it
+    const uri = result.tools[0]._meta?.ui?.resourceUri;
+    assert.equal(uri, "ui://openai-image/view.html");
+    send({ jsonrpc: "2.0", id: 3, method: "resources/read", params: { uri } });
+    const [view] = (await reply(3)).result.contents;
+    assert.equal(view.mimeType, "text/html;profile=mcp-app");
+    assert.match(view.text, /ui\/notifications\/tool-result/);
   } finally {
     proc.stdin.end();
     proc.kill();

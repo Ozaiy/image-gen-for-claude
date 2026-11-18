@@ -25,6 +25,7 @@ import io
 import os
 import re
 from datetime import datetime
+from importlib.resources import files
 from pathlib import Path
 from typing import Literal
 
@@ -39,8 +40,19 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 PREVIEW_MAX_SIDE = 1024  # px; the full-resolution image stays on disk
 PREVIEW_QUALITY = 80
 
+# MCP Apps: hosts that support it (Claude Desktop, claude.ai) show the image large,
+# inline in the chat, using this HTML view. Other clients ignore it.
+VIEW_URI = "ui://openai-image/view.html"
+VIEW_MIME_TYPE = "text/html;profile=mcp-app"
+
 mcp = MCPServer("openai-image")
 _client = None
+
+
+@mcp.resource(VIEW_URI, name="image_view", title="Generated image", mime_type=VIEW_MIME_TYPE,
+              meta={"ui": {"prefersBorder": False}})
+def image_view() -> str:
+    return files(__package__).joinpath("view.html").read_text(encoding="utf-8")
 
 
 def expand(path: str) -> Path:
@@ -155,7 +167,8 @@ def preview_jpeg(data: bytes) -> bytes:
         return out.getvalue()
 
 
-@mcp.tool()
+# "ui/resourceUri" is the older spelling of the same key, for hosts that only know that one
+@mcp.tool(meta={"ui": {"resourceUri": VIEW_URI}, "ui/resourceUri": VIEW_URI})
 def generate_image(
     prompt: str,
     quality: Literal["low", "medium", "high"] = "low",

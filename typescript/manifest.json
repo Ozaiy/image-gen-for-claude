@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "openai-image-mcp-for-claude",
   "display_name": "OpenAI Image Generation",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Generate images with OpenAI (gpt-image) and save them straight to disk.",
   "long_description": "Gives Claude a generate_image tool that uses the OpenAI Images API. Images are saved to your Pictures folder, or to any folder or file path you name, at full resolution. Claude gets the file path and a small JPEG preview, so it can see the image without a large file filling up the conversation. Quality defaults to low to keep costs down. Transparent backgrounds are supported for logos and icons.",
   "author": {
