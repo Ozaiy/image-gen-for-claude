@@ -1,0 +1,45 @@
+# Push a tag like v0.3.0 to make a release:
+#   - builds the Claude Desktop extension (.mcpb) and attaches it to a GitHub release
+#   - publishes the npm package, if the repo has an NPM_TOKEN secret
+# Keep the version the same in typescript/package.json, typescript/manifest.json,
+# typescript/src/lib.ts, pyproject.toml and src/openai_image_mcp/__init__.py.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write # npm provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci
+      - name: Check the tag matches the version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME but package.json says $version"; exit 1; }
+      - run: npm run build
+      - run: npm test
+      - run: npm run pack:mcpb
+      - name: GitHub release with the .mcpb
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" build/*.mcpb --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: env.NODE_AUTH_TOKEN != ''
+        run: npm publish --provenance --access public

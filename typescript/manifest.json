@@ -1,0 +1,59 @@
+{
+  "manifest_version": "0.3",
+  "name": "openai-image-mcp-for-claude",
+  "display_name": "OpenAI Image Generation",
+  "version": "0.2.0",
+  "description": "Generate images with OpenAI (gpt-image) and save them straight to disk.",
+  "long_description": "Gives Claude a generate_image tool that uses the OpenAI Images API. Images are saved to your Pictures folder, or to any folder or file path you name, and only the file path goes back to Claude, so no image data fills up the conversation. Quality defaults to low to keep costs down. Transparent backgrounds are supported for logos and icons.",
+  "author": {
+    "name": "Ozcan Isik",
+    "url": "https://github.com/Ozaiy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ozaiy/openai-image-mcp-for-claude"
+  },
+  "homepage": "https://github.com/Ozaiy/openai-image-mcp-for-claude",
+  "support": "https://github.com/Ozaiy/openai-image-mcp-for-claude/issues",
+  "license": "MIT",
+  "keywords": ["openai", "image", "image-generation", "gpt-image", "logo", "illustration"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "OPENAI_API_KEY": "${user_config.openai_api_key}",
+        "OPENAI_IMAGE_OUTPUT_DIR": "${user_config.output_dir}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "generate_image",
+      "description": "Generate an image with OpenAI and save it to disk. Returns the saved file path."
+    }
+  ],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API key",
+      "description": "Your key from platform.openai.com/api-keys. Claude Desktop stores it in your system keychain. Image generation is billed by OpenAI.",
+      "sensitive": true,
+      "required": true
+    },
+    "output_dir": {
+      "type": "directory",
+      "title": "Save folder",
+      "description": "Where images are saved when Claude doesn't name a full path. Leave empty for your Pictures folder.",
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

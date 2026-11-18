@@ -1,0 +1,51 @@
+{
+  "name": "openai-image-mcp-for-claude",
+  "version": "0.2.0",
+  "description": "MCP server that lets Claude generate images with the OpenAI Images API and save them to disk",
+  "license": "MIT",
+  "author": "Ozcan Isik",
+  "type": "module",
+  "bin": {
+    "openai-image-mcp-for-claude": "dist/index.js"
+  },
+  "files": [
+    "dist/index.js",
+    "dist/THIRD_PARTY_LICENSES.txt",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ozaiy/openai-image-mcp-for-claude.git",
+    "directory": "typescript"
+  },
+  "homepage": "https://github.com/Ozaiy/openai-image-mcp-for-claude#readme",
+  "bugs": "https://github.com/Ozaiy/openai-image-mcp-for-claude/issues",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "openai",
+    "image-generation",
+    "claude",
+    "gpt-image"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "pack:mcpb": "npm run build && node scripts/pack-mcpb.mjs",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@types/node": "22.20.5",
+    "esbuild": "0.28.2",
+    "openai": "7.50.0",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "zod": "4.6.7"
+  }
+}

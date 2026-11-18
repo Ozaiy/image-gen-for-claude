@@ -1,0 +1,52 @@
+# openai-image-mcp-for-claude
+
+An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any MCP client) generate images with the OpenAI Images API. Works on Windows, macOS and Linux.
+
+Images are saved to disk and only the file path goes back to the model, so no image data ends up in the conversation.
+
+**Full documentation:** https://github.com/Ozaiy/openai-image-mcp-for-claude
+
+## Install
+
+**Claude Desktop:** download the `.mcpb` file from the [latest release](https://github.com/Ozaiy/openai-image-mcp-for-claude/releases/latest) and double-click it. Nothing else to install; Claude Desktop asks for your OpenAI API key and keeps it in your system keychain.
+
+**Claude Code** (needs Node.js 20 or newer):
+
+```sh
+# macOS / Linux
+claude mcp add openai-image --scope user -- npx -y openai-image-mcp-for-claude
+
+# Windows
+claude mcp add openai-image --scope user -- cmd /c npx -y openai-image-mcp-for-claude
+```
+
+**Other MCP clients:**
+
+```json
+{
+  "mcpServers": {
+    "openai-image": { "command": "npx", "args": ["-y", "openai-image-mcp-for-claude"] }
+  }
+}
+```
+
+## API key
+
+The server uses `OPENAI_API_KEY` if it's set. Otherwise it reads a file named `api_key` from:
+
+| OS | Location |
+|---|---|
+| Windows | `%APPDATA%\openai\api_key` |
+| macOS | `~/Library/Application Support/openai/api_key` |
+| Linux | `~/.config/openai/api_key` |
+| any OS | `~/.config/openai/api_key` |
+
+## The tool
+
+`generate_image` takes `prompt`, `quality` (`low` by default, because higher costs much more), `size`, `background` (`transparent` for logos), `output_format`, `output_path` and `model`. Without an `output_path`, images go to your Pictures folder; set `OPENAI_IMAGE_OUTPUT_DIR` to change that.
+
+See the [full README](https://github.com/Ozaiy/openai-image-mcp-for-claude#readme) for details and the Python version.
+
+## License
+
+MIT. `dist/THIRD_PARTY_LICENSES.txt` lists the open-source packages bundled into `dist/index.js`.
